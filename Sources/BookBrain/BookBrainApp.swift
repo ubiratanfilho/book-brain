@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
   private var window: NSWindow!
   private var statusItem: NSStatusItem!
   private var shortcut: GlobalHotKey?
+  private var expandedSize = NSSize(width: 600, height: 830)
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     NSApp.setActivationPolicy(.regular)
@@ -30,7 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     window.titlebarAppearsTransparent = true
     window.titleVisibility = .hidden
     window.backgroundColor = NSColor(calibratedRed: 0.97, green: 0.96, blue: 0.94, alpha: 1)
-    window.minSize = NSSize(width: 480, height: 650)
+    window.minSize = NSSize(width: 300, height: 280)
     window.level = .floating
     window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
     window.isReleasedWhenClosed = false
@@ -39,12 +40,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
       self, selector: #selector(applicationActivated(_:)),
       name: NSWorkspace.didActivateApplicationNotification, object: nil)
     shortcut = GlobalHotKey { [weak self] in
-      MainActor.assumeIsolated { self?.pasteFromMenu() }
+      MainActor.assumeIsolated {
+        let frontmost = NSWorkspace.shared.frontmostApplication
+        self?.captureAndShow(
+          from: frontmost?.bundleIdentifier == KindleSelection.bundleID ? frontmost : nil)
+      }
     }
-    let root = ContentView(model: model, shortcutAvailable: shortcut?.register() == true) {
-      [weak self] floating in
-      self?.window.level = floating ? .floating : .normal
-    }
+    let root = ContentView(
+      model: model, shortcutAvailable: shortcut?.register() == true,
+      setFloating: { [weak self] floating in self?.window.level = floating ? .floating : .normal },
+      setCompact: { [weak self] compact in self?.resizeWindow(compact: compact) })
     let content = NSHostingView(rootView: root)
     content.sizingOptions = []
     window.contentView = content
@@ -95,7 +100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
       withTitle: "Abrir Book Brain", action: #selector(showWindow), keyEquivalent: "")
     open.target = self
     let paste = menu.addItem(
-      withTitle: "Colar trecho copiado  ⌘⇧B", action: #selector(pasteFromMenu), keyEquivalent: "")
+      withTitle: "Colar trecho copiado", action: #selector(pasteFromMenu), keyEquivalent: "")
     paste.target = self
     menu.addItem(.separator())
     menu.addItem(
@@ -106,12 +111,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
   @objc private func showWindow() {
     NSApp.activate(ignoringOtherApps: true)
     window.makeKeyAndOrderFront(nil)
+    if let screen = readingScreen, !screen.visibleFrame.contains(window.frame) {
+      fitWindow(size: window.frame.size, in: screen.visibleFrame)
+    }
+  }
+
+  private func resizeWindow(compact: Bool) {
+    guard let visible = (readingScreen ?? window.screen)?.visibleFrame else { return }
+    if compact { expandedSize = window.frame.size }
+    let requested = compact ? NSSize(width: 350, height: 390) : expandedSize
+    fitWindow(size: requested, in: visible)
+  }
+
+  private func fitWindow(size requested: NSSize, in visible: NSRect) {
+    let previous = window.frame
+    let width = min(requested.width, visible.width)
+    let height = min(requested.height, visible.height)
+    let x = min(max(previous.maxX - width, visible.minX), visible.maxX - width)
+    let y = min(max(previous.maxY - height, visible.minY), visible.maxY - height)
+    window.setFrame(NSRect(x: x, y: y, width: width, height: height), display: true)
+  }
+
+  private func identifier(of screen: NSScreen) -> String? {
+    guard let number = screen.deviceDescription[.init("NSScreenNumber")] as? NSNumber,
+      let uuid = CGDisplayCreateUUIDFromDisplayID(number.uint32Value)?.takeRetainedValue()
+    else { return nil }
+    return CFUUIDCreateString(nil, uuid) as String
+  }
+
+  private var readingScreen: NSScreen? {
+    guard let id = UserDefaults.standard.string(forKey: "ReadingDisplayUUID") else { return nil }
+    return NSScreen.screens.first { identifier(of: $0) == id }
+  }
+
+  func windowDidMove(_ notification: Notification) {
+    // AppKit can move a restored window during activation. Only a user's drag
+    // changes the selected display; programmatic resizes preserve that choice.
+    guard NSApp.currentEvent?.type == .leftMouseDragged, let screen = window.screen,
+      let id = identifier(of: screen)
+    else { return }
+    UserDefaults.standard.set(id, forKey: "ReadingDisplayUUID")
   }
 
   @objc private func pasteFromMenu() {
+    captureAndShow(from: nil)
+  }
+
+  private func captureAndShow(from kindle: NSRunningApplication?) {
     Task {
       guard !model.isImporting else { return }
-      await model.pasteExcerpt()
+      await model.pasteExcerpt(from: kindle)
       showWindow()
     }
   }
@@ -119,8 +168,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
   @objc private func applicationActivated(_ notification: Notification) {
     let application =
       notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
-    if application?.bundleIdentifier == "com.amazon.Lassen" { model.clipboard.beginReading() }
+    if application?.bundleIdentifier == KindleSelection.bundleID { model.clipboard.beginReading() }
   }
+
+  func applicationDidBecomeActive(_ notification: Notification) { model.refreshCopyAccess() }
 
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool
   {

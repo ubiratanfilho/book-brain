@@ -13,27 +13,34 @@ struct ContentView: View {
   @ObservedObject var model: AppModel
   let shortcutAvailable: Bool
   let setFloating: (Bool) -> Void
+  let setCompact: (Bool) -> Void
   @State private var newTitle = ""
   @State private var confirmDelete = false
+  @State private var editingCompactExcerpt = false
   @FocusState private var questionFocused: Bool
 
   var body: some View {
-    VStack(spacing: 0) {
-      header
-      if !shortcutAvailable {
-        banner(
-          "O atalho ⌘⇧B está indisponível. Use Colar trecho na janela ou na barra de menus.",
-          isError: true)
+    GeometryReader { geometry in
+      let compact = geometry.size.width < 480 || geometry.size.height < 620
+      VStack(spacing: 0) {
+        header(compact: compact)
+        if let book = model.selectedBook {
+          if !compact {
+            notices
+            bookHeader(book, compact: false)
+            excerptCard(book, compact: false)
+          }
+          conversation(book, compact: compact)
+          composer(book, compact: compact)
+        } else {
+          ScrollView {
+            notices
+            welcome
+          }
+        }
       }
-      if let error = model.storageError { banner(error, isError: true) }
-      if let notice = model.notice { banner(notice, isError: false) }
-      if let book = model.selectedBook {
-        bookHeader(book)
-        excerptCard(book)
-        conversation(book)
-        composer(book)
-      } else {
-        welcome
+      .sheet(isPresented: $model.showNewBook) {
+        newBookSheet.frame(width: min(400, geometry.size.width))
       }
     }
     .background(Palette.paper)
@@ -42,7 +49,6 @@ struct ContentView: View {
     .preferredColorScheme(.light)
     .padding(.top, 28)
     .background(Palette.paper)
-    .sheet(isPresented: $model.showNewBook) { newBookSheet }
     .alert("Excluir este livro e suas conversas?", isPresented: $confirmDelete) {
       Button("Cancelar", role: .cancel) {}
       Button("Excluir", role: .destructive) { model.deleteSelectedBook() }
@@ -52,8 +58,18 @@ struct ContentView: View {
     .onChange(of: model.focusQuestion) { _, _ in questionFocused = true }
   }
 
-  private var header: some View {
-    HStack(spacing: 10) {
+  @ViewBuilder private var notices: some View {
+    if !shortcutAvailable {
+      banner(
+        "O atalho ⌘⇧B está indisponível. Use Colar trecho na janela ou na barra de menus.",
+        isError: true)
+    }
+    if let error = model.storageError { banner(error, isError: true) }
+    if let notice = model.notice { banner(notice, isError: false) }
+  }
+
+  private func header(compact: Bool) -> some View {
+    HStack(spacing: compact ? 5 : 10) {
       Image(systemName: "book.closed.fill")
         .font(.system(size: 18)).foregroundStyle(Palette.green)
       Text("book brain").font(.system(size: 20, weight: .semibold, design: .serif))
@@ -68,14 +84,28 @@ struct ContentView: View {
         HStack(spacing: 6) {
           Circle().fill(model.isConnected ? Palette.green : .orange).frame(width: 6, height: 6)
           Text(
-            model.isConnecting
-              ? "Conectando…" : model.isConnected ? "Codex conectado" : "Conectar Codex"
+            compact
+              ? "Codex"
+              : (model.isConnecting
+                ? "Conectando…" : model.isConnected ? "Codex conectado" : "Conectar Codex")
           )
           .font(.system(size: 11, weight: .medium))
         }
       }
       .menuStyle(.borderlessButton).fixedSize()
       .disabled(model.isConnecting || model.isBusy)
+      Button {
+        setCompact(!compact)
+      } label: {
+        Image(
+          systemName: compact
+            ? "arrow.up.left.and.arrow.down.right" : "arrow.down.right.and.arrow.up.left"
+        )
+        .frame(width: 24, height: 28)
+      }
+      .buttonStyle(.plain)
+      .help(compact ? "Ampliar janela" : "Reduzir janela")
+      .accessibilityLabel(compact ? "Ampliar janela" : "Reduzir janela")
       Button {
         model.floating.toggle()
         setFloating(model.floating)
@@ -88,15 +118,21 @@ struct ContentView: View {
       .help(model.floating ? "Desafixar janela" : "Manter janela acima do Kindle")
       .accessibilityLabel("Manter janela acima do Kindle")
     }
-    .padding(.horizontal, 24).padding(.top, 8).padding(.bottom, 18)
+    .padding(.horizontal, compact ? 12 : 24).padding(.top, compact ? 0 : 8).padding(
+      .bottom, compact ? 4 : 18
+    )
     .overlay(alignment: .bottom) { Palette.line.frame(height: 1) }
   }
 
-  private func bookHeader(_ book: Book) -> some View {
+  private func bookHeader(_ book: Book, compact: Bool) -> some View {
     VStack(alignment: .leading, spacing: 8) {
       HStack {
-        Text("SUA LEITURA").font(.system(size: 10, weight: .semibold)).tracking(1.8)
-          .foregroundStyle(Palette.muted)
+        if compact {
+          Text(book.title).font(.system(size: 17, weight: .medium, design: .serif)).lineLimit(2)
+        } else {
+          Text("SUA LEITURA").font(.system(size: 10, weight: .semibold)).tracking(1.8)
+            .foregroundStyle(Palette.muted)
+        }
         Spacer()
         Menu {
           ForEach(model.library.books) { item in
@@ -114,21 +150,35 @@ struct ContentView: View {
         .menuStyle(.borderlessButton).fixedSize().font(.system(size: 12))
         .disabled(!model.isEditable)
       }
-      Text(book.title).font(.system(size: 26, weight: .medium, design: .serif))
-        .lineLimit(2).textSelection(.enabled)
+      if !compact {
+        Text(book.title).font(.system(size: 26, weight: .medium, design: .serif))
+          .lineLimit(2).textSelection(.enabled)
+      }
       TextField("Capítulo ou página · opcional", text: model.field(\.location))
         .textFieldStyle(.plain).font(.system(size: 12)).foregroundStyle(Palette.muted)
         .accessibilityLabel("Capítulo ou página")
         .disabled(!model.isEditable)
     }
-    .padding(.horizontal, 24).padding(.top, 20).padding(.bottom, 16)
+    .padding(.horizontal, compact ? 0 : 24).padding(.top, compact ? 0 : 20).padding(
+      .bottom, compact ? 0 : 16)
   }
 
-  private func excerptCard(_ book: Book) -> some View {
+  private func excerptCard(_ book: Book, compact: Bool) -> some View {
     VStack(alignment: .leading, spacing: 8) {
       HStack {
-        Label("Trecho em foco", systemImage: "text.quote")
-          .font(.system(size: 12, weight: .semibold))
+        if compact {
+          Button {
+            editingCompactExcerpt.toggle()
+          } label: {
+            Label(
+              "Trecho em foco",
+              systemImage: editingCompactExcerpt ? "chevron.down" : "chevron.right")
+          }.buttonStyle(.plain).font(.system(size: 12, weight: .semibold))
+            .help("Expandir ou recolher o editor do trecho")
+        } else {
+          Label("Trecho em foco", systemImage: "text.quote")
+            .font(.system(size: 12, weight: .semibold))
+        }
         Spacer()
         Button {
           Task { await model.pasteExcerpt() }
@@ -136,10 +186,13 @@ struct ContentView: View {
           HStack(spacing: 5) {
             Image(systemName: "doc.on.clipboard")
             Text("Colar trecho")
-            Text("⌘⇧B").foregroundStyle(Palette.muted)
           }.font(.system(size: 11, weight: .medium))
         }
         .buttonStyle(.plain).disabled(!model.isEditable)
+      }
+      if !model.canCopyFromKindle {
+        Button("Ativar captura direta no Kindle…") { model.requestCopyAccess() }
+          .font(.system(size: 11))
       }
       if let issue = model.captureIssue {
         VStack(alignment: .leading, spacing: 7) {
@@ -150,48 +203,56 @@ struct ContentView: View {
         }.font(.system(size: 12))
           .padding(10).background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
       }
-      ZStack(alignment: .topLeading) {
-        if book.excerpt.isEmpty {
-          Text("No Kindle, selecione um trecho e copie com ⌘C. Depois, use ⌘⇧B ou cole aqui.")
-            .font(.system(size: 13)).foregroundStyle(Palette.muted)
-            .padding(.horizontal, 5).padding(.top, 8).allowsHitTesting(false)
+      if compact && !editingCompactExcerpt {
+        Text(book.excerpt.isEmpty ? "Selecione um trecho no Kindle e pressione ⌘⇧B." : book.excerpt)
+          .font(.system(size: 12, design: .serif)).lineLimit(2)
+          .frame(maxWidth: .infinity, alignment: .leading)
+      } else {
+        ZStack(alignment: .topLeading) {
+          if book.excerpt.isEmpty {
+            Text("Selecione um trecho no Kindle e pressione ⌘⇧B, ou cole o texto aqui.")
+              .font(.system(size: 13)).foregroundStyle(Palette.muted)
+              .padding(.horizontal, 5).padding(.top, 8).allowsHitTesting(false)
+          }
+          TextEditor(text: model.field(\.excerpt))
+            .font(.system(size: 14, design: .serif)).lineSpacing(4)
+            .scrollContentBackground(.hidden)
+            .frame(height: compact ? 60 : 94)
+            .accessibilityLabel("Trecho do livro")
+            .disabled(!model.isEditable)
         }
-        TextEditor(text: model.field(\.excerpt))
-          .font(.system(size: 14, design: .serif)).lineSpacing(4)
-          .scrollContentBackground(.hidden)
-          .frame(height: 94)
-          .accessibilityLabel("Trecho do livro")
-          .disabled(!model.isEditable)
+        HStack {
+          Spacer()
+          Text("\(book.excerpt.count.formatted()) / 12.000")
+            .foregroundStyle(book.excerpt.count > ReadingPrompt.excerptLimit ? .red : Palette.muted)
+        }.font(.system(size: 10)).foregroundStyle(Palette.muted)
       }
-      HStack {
-        Text("Você escolhe o que compartilhar.")
-        Spacer()
-        Text("\(book.excerpt.count.formatted()) / 12.000")
-          .foregroundStyle(book.excerpt.count > ReadingPrompt.excerptLimit ? .red : Palette.muted)
-      }.font(.system(size: 10)).foregroundStyle(Palette.muted)
     }
     .padding(14)
     .background(.white.opacity(0.65), in: RoundedRectangle(cornerRadius: 12))
     .overlay { RoundedRectangle(cornerRadius: 12).stroke(Palette.line, lineWidth: 1) }
-    .padding(.horizontal, 24)
+    .padding(.horizontal, compact ? 0 : 24)
   }
 
-  private func conversation(_ book: Book) -> some View {
+  private func conversation(_ book: Book, compact: Bool) -> some View {
     ScrollViewReader { proxy in
       ScrollView {
-        LazyVStack(alignment: .leading, spacing: 24) {
+        LazyVStack(alignment: .leading, spacing: compact ? 12 : 24) {
+          if compact {
+            VStack(alignment: .leading, spacing: 8) {
+              notices
+              bookHeader(book, compact: true)
+              excerptCard(book, compact: true)
+            }.id("context")
+          }
           if book.exchanges.isEmpty && !model.isBusy {
             VStack(alignment: .leading, spacing: 12) {
-              Text("Dê espaço à curiosidade.")
-                .font(.system(size: 23, weight: .regular, design: .serif))
-              Text("Uma ideia difícil, uma conexão inesperada, uma pergunta que ficou.")
-                .font(.system(size: 13)).foregroundStyle(Palette.muted).lineSpacing(3)
               VStack(alignment: .leading, spacing: 8) {
                 suggestion("Me explica com um exemplo", icon: "lightbulb")
                 suggestion("Qual é a ideia central deste trecho?", icon: "text.alignleft")
                 suggestion("Me faça uma pergunta sobre o trecho", icon: "bubble.left")
               }.padding(.top, 6)
-            }.padding(.vertical, 24)
+            }.padding(.vertical, compact ? 0 : 12)
           }
           ForEach(book.exchanges) { exchange in
             VStack(alignment: .leading, spacing: 14) {
@@ -219,20 +280,29 @@ struct ContentView: View {
             }
           }
           Color.clear.frame(height: 1).id("bottom")
-        }.padding(.horizontal, 24).padding(.vertical, 20)
+        }.padding(.horizontal, compact ? 12 : 24).padding(.vertical, compact ? 8 : 20)
       }
       .onChange(of: model.streamingAnswer) { _, _ in proxy.scrollTo("bottom", anchor: .bottom) }
       .onChange(of: book.exchanges.count) { _, _ in proxy.scrollTo("bottom", anchor: .bottom) }
       .onChange(of: model.isBusy) { _, _ in proxy.scrollTo("bottom", anchor: .bottom) }
-      .onChange(of: book.id) { _, _ in proxy.scrollTo("bottom", anchor: .bottom) }
+      .onChange(of: book.id) { _, _ in
+        editingCompactExcerpt = false
+        proxy.scrollTo(compact ? "context" : "bottom", anchor: compact ? .top : .bottom)
+      }
+      .onChange(of: model.captureIssue) { _, issue in
+        if compact && issue != nil { proxy.scrollTo("context", anchor: .top) }
+      }
+      .onChange(of: book.excerpt) { _, _ in
+        if compact && !editingCompactExcerpt { proxy.scrollTo("context", anchor: .top) }
+      }
     }
   }
 
-  private func composer(_ book: Book) -> some View {
-    VStack(alignment: .leading, spacing: 10) {
+  private func composer(_ book: Book, compact: Bool) -> some View {
+    VStack(alignment: .leading, spacing: compact ? 4 : 10) {
       HStack(alignment: .bottom, spacing: 12) {
         TextField("O que você quer entender?", text: model.field(\.question), axis: .vertical)
-          .textFieldStyle(.plain).font(.system(size: 14)).lineLimit(2...5)
+          .textFieldStyle(.plain).font(.system(size: 14)).lineLimit(compact ? 1...2 : 2...5)
           .focused($questionFocused).disabled(!model.isEditable)
           .accessibilityLabel("Sua pergunta")
         if model.isBusy {
@@ -253,18 +323,22 @@ struct ContentView: View {
               || book.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
       }
-      .padding(14).background(.white, in: RoundedRectangle(cornerRadius: 12))
+      .padding(compact ? 8 : 14).background(.white, in: RoundedRectangle(cornerRadius: 12))
       .overlay { RoundedRectangle(cornerRadius: 12).stroke(Palette.line, lineWidth: 1) }
       HStack(alignment: .top) {
         Text(
-          "Ao enviar, o trecho e até 6 trocas recentes vão ao Codex.\nO livro inteiro não é acessado."
+          compact
+            ? "Envia o trecho e o histórico recente ao Codex."
+            : "Ao enviar, o trecho e até 6 trocas recentes vão ao Codex."
         )
         .fixedSize(horizontal: false, vertical: true)
         Spacer()
-        Text("⌘↩ enviar").fixedSize()
+        if !compact { Text("⌘↩ enviar").fixedSize() }
       }.font(.system(size: 10)).foregroundStyle(Palette.muted)
     }
-    .padding(.horizontal, 24).padding(.bottom, 20).padding(.top, 12)
+    .padding(.horizontal, compact ? 12 : 24).padding(.bottom, compact ? 7 : 20).padding(
+      .top, compact ? 6 : 12
+    )
     .background(Palette.paper)
     .overlay(alignment: .top) { Palette.line.frame(height: 1) }
   }
@@ -274,10 +348,10 @@ struct ContentView: View {
       Spacer()
       Image(systemName: "book.pages").font(.system(size: 48, weight: .ultraLight))
         .foregroundStyle(Palette.green)
-      Text("Um livro.\nMuitas boas perguntas.")
+      Text("Seu livro no Book Brain")
         .font(.system(size: 36, weight: .regular, design: .serif)).lineSpacing(3)
       Text(
-        "Leia no Kindle, copie um trecho e converse sobre ele aqui. Seu espaço para pensar junto com o livro."
+        "Adicione o livro, selecione um trecho no Kindle e use ⌘⇧B para trazê-lo à conversa."
       )
       .font(.system(size: 15)).foregroundStyle(Palette.muted).lineSpacing(5)
       .fixedSize(horizontal: false, vertical: true)
@@ -291,9 +365,8 @@ struct ContentView: View {
       .buttonStyle(.borderedProminent).controlSize(.large).disabled(!model.isEditable)
       Spacer()
       VStack(alignment: .leading, spacing: 10) {
-        step("1", "Copie um trecho no Kindle", shortcut: "⌘C")
-        step("2", "Traga o trecho para cá", shortcut: "⌘⇧B")
-        step("3", "Pergunte, explore, continue lendo", shortcut: "⌘↩")
+        step("1", "Trazer a seleção do Kindle", shortcut: "⌘⇧B")
+        step("2", "Enviar uma pergunta", shortcut: "⌘↩")
       }
       .padding(18).background(.white.opacity(0.6), in: RoundedRectangle(cornerRadius: 14))
       Text(
@@ -319,7 +392,7 @@ struct ContentView: View {
           .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
           .disabled(newTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
       }
-    }.padding(28).frame(width: 400).background(Palette.paper)
+    }.padding(22).background(Palette.paper)
   }
 
   private func addBook() {

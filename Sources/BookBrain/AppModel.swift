@@ -8,6 +8,7 @@ final class AppModel: ObservableObject {
   @Published var notice: String?
   @Published var captureIssue: String?
   @Published private(set) var isImporting = false
+  @Published private(set) var canCopyFromKindle = CGPreflightPostEventAccess()
   @Published var storageError: String?
   @Published var isConnecting = false
   @Published var isConnected = false
@@ -85,7 +86,17 @@ final class AppModel: ObservableObject {
     saveNow()
   }
 
-  func pasteExcerpt() async {
+  func refreshCopyAccess() { canCopyFromKindle = CGPreflightPostEventAccess() }
+
+  func requestCopyAccess() {
+    canCopyFromKindle = CGRequestPostEventAccess()
+    if !canCopyFromKindle {
+      notice =
+        "Ative Book Brain em Ajustes do Sistema → Privacidade e Segurança → Acessibilidade. Depois, volte ao Kindle e use ⌘⇧B."
+    }
+  }
+
+  func pasteExcerpt(from kindle: NSRunningApplication? = nil) async {
     guard !isImporting else { return }
     guard isEditable else {
       notice = "Aguarde a resposta atual ou clique em Parar antes de trocar o trecho."
@@ -100,7 +111,21 @@ final class AppModel: ObservableObject {
     defer { isImporting = false }
     notice = nil
     do {
-      let excerpt = try await clipboard.readNewExcerpt()
+      let excerpt: String
+      if let kindle {
+        refreshCopyAccess()
+        if canCopyFromKindle {
+          excerpt = try await clipboard.readNewExcerpt { try KindleSelection.copy(in: kindle) }
+        } else if clipboard.hasNewCopy {
+          excerpt = try await clipboard.readNewExcerpt()
+        } else {
+          throw BookBrainError.message(
+            "Para trazer a seleção direto do Kindle com ⌘⇧B, autorize o Book Brain em Acessibilidade."
+          )
+        }
+      } else {
+        excerpt = try await clipboard.readNewExcerpt()
+      }
       library.books[index].excerpt = excerpt
       captureIssue = nil
       focusQuestion += 1

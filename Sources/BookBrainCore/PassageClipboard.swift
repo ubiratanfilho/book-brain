@@ -15,7 +15,16 @@ public final class PassageClipboard {
     previousGeneration = pasteboard.changeCount
   }
 
-  public func readNewExcerpt() async throws -> String {
+  public var hasNewCopy: Bool {
+    guard let previousGeneration else { return false }
+    return previousGeneration != pasteboard.changeCount
+  }
+
+  public func readNewExcerpt(copySelection: (() throws -> Void)? = nil) async throws -> String {
+    if let copySelection {
+      previousGeneration = pasteboard.changeCount
+      try copySelection()
+    }
     let deadline = ContinuousClock.now.advanced(by: .milliseconds(750))
     repeat {
       try Task.checkCancellation()
@@ -36,6 +45,11 @@ public final class PassageClipboard {
       // The reader can press the shortcut while Kindle is still publishing its copy.
       try await Task.sleep(for: .milliseconds(50))
     } while ContinuousClock.now < deadline
+    if copySelection != nil {
+      throw BookBrainError.message(
+        "O Kindle não disponibilizou um novo trecho. Selecione o texto no livro e pressione ⌘⇧B novamente."
+      )
+    }
     throw BookBrainError.message(
       "Falta uma nova cópia. No Kindle, selecione o trecho, clique em Copiar (ou use ⌘C) e pressione ⌘⇧B."
     )

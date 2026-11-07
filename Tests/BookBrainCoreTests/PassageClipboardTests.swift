@@ -45,4 +45,24 @@ final class PassageClipboardTests: XCTestCase {
     try await writer.value
     XCTAssertEqual(excerpt, "Current selection")
   }
+
+  func testDirectCopyRequiresAPublicationAfterTheCopyCommand() async throws {
+    let board = NSPasteboard.withUniqueName()
+    defer { board.releaseGlobally() }
+    let capture = PassageClipboard(board)
+    capture.beginReading()
+    board.clearContents()
+    board.setString("Previously copied, but never imported", forType: .string)
+    XCTAssertTrue(capture.hasNewCopy)
+    do {
+      _ = try await capture.readNewExcerpt(copySelection: {})
+      XCTFail("A copy command with no selection must not reuse unimported clipboard text.")
+    } catch { XCTAssertTrue(error.localizedDescription.contains("Kindle")) }
+    let selected = try await capture.readNewExcerpt {
+      board.clearContents()
+      board.setString("New selection", forType: .string)
+    }
+    XCTAssertEqual(selected, "New selection")
+    XCTAssertFalse(capture.hasNewCopy)
+  }
 }

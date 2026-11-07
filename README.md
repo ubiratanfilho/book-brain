@@ -5,12 +5,14 @@ Um companheiro de leitura nativo para macOS: copie um trecho no Kindle e convers
 ## Usar
 
 1. Abra **Book Brain** e adicione o título do livro. O aplicativo tenta conectar à sessão local do Codex.
-2. No Kindle, selecione um trecho e clique em **Copiar** no menu da seleção ou use **⌘C**.
-3. Pressione **⌘⇧B** para abrir o Book Brain e trazer o texto copiado. Você também pode clicar em **Colar trecho** ou colar diretamente no campo.
+2. Para habilitar o atalho direto, clique em **Ativar captura direta no Kindle…** e autorize o Book Brain em **Privacidade e Segurança → Acessibilidade** nos Ajustes do Sistema.
+3. No Kindle, selecione um trecho e pressione **⌘⇧B**. O Book Brain aciona o comando Copiar no Kindle e abre a prévia da nova seleção. Para usar a cópia manual, escolha **Copiar** no Kindle e **Colar trecho** no Book Brain.
 4. Confira o trecho, escreva sua pergunta e envie com **⌘Return**.
 5. Use **Livros** para alternar entre leituras. Cada livro tem seu próprio trecho, rascunho e histórico.
 
 O botão de alfinete mantém a janela acima do Kindle. Fechar a janela mantém o app na barra de menus; **⌘Q** encerra o aplicativo. O atalho só funciona enquanto o Book Brain está em execução. Se outro aplicativo já usa ⌘⇧B, um aviso orienta a usar o botão ou a barra de menus.
+
+Arraste uma borda para ajustar a janela até **300 × 280 pontos** ou use o botão **Reduzir janela**. No formato compacto, a pergunta e o envio ficam fixos, e o trecho pode ser expandido para edição. **Ampliar janela** restaura o tamanho anterior no mesmo monitor.
 
 ## Requisitos e compilação
 
@@ -40,7 +42,8 @@ Não acessa o livro inteiro, não modifica o Kindle e não importa arquivos prot
 
 ## Dados e limites
 
-- O conteúdo do clipboard é lido ao acionar **⌘⇧B** ou **Colar trecho**. Quando o Kindle ganha foco, o app registra apenas o contador de alterações do clipboard. Ao importar, aguarda brevemente a conclusão da cópia. Se o contador continuar igual ao da entrada no Kindle ou ao da última importação, o app avisa e suspende o envio até você copiar, editar ou escolher continuar com o contexto anterior.
+- A captura direta usa a permissão de Acessibilidade para enviar ⌘C ao processo do Kindle que estava em primeiro plano ao pressionar **⌘⇧B**. Ela atualiza o clipboard como uma cópia manual. O app exige uma nova publicação após o comando e mostra o trecho antes do envio. Uma seleção sem permissão de cópia não é importada.
+- O conteúdo do clipboard é lido ao acionar o atalho ou **Colar trecho**. Na cópia manual, o contador de alterações registrado quando o Kindle ganhou foco permite detectar uma cópia antiga. A pergunta fica suspensa até você copiar, editar ou escolher continuar com o contexto anterior.
 - Ao enviar uma pergunta, o título, referência, trecho atual, pergunta e histórico recente selecionado são enviados ao Codex para processamento pelo provedor configurado. O app mostra esse aviso junto ao campo de envio.
 - Limites por pergunta: **12.000 caracteres no trecho** e **4.000 na pergunta**. Textos grandes são rejeitados, não cortados silenciosamente. O histórico mais antigo continua salvo no app, mas pode ficar fora do contexto enviado.
 - Livros, trechos, perguntas, respostas e rascunhos ficam em `~/Library/Application Support/BookBrain/library.json`. O arquivo é texto legível, com permissão `0600`, em uma pasta criada com `0700`. Não há criptografia própria nem sincronização.
