@@ -4,6 +4,7 @@
 import json
 import os
 import sys
+import uuid
 
 
 def emit(message):
@@ -14,7 +15,14 @@ def emit(message):
 
 
 def event(method, **params):
-    emit({"method": method, "params": {"threadId": "test-thread", **params}})
+    if method == "turn/completed":
+        params["turn"]["id"] = turn_id
+    emit(
+        {
+            "method": method,
+            "params": {"threadId": thread_id, "turnId": turn_id, **params},
+        }
+    )
 
 
 for line in sys.stdin:
@@ -35,7 +43,12 @@ for line in sys.stdin:
         result = {"account": {"type": "chatgpt"}, "requiresOpenaiAuth": True}
     elif method == "config/read":
         result = {"config": {"mcp_servers": {"private_server": {"enabled": True}}}}
-    elif method == "thread/start":
+    elif method in ("thread/start", "thread/resume"):
+        if method == "thread/start":
+            thread_id = str(uuid.uuid4())
+        else:
+            thread_id = params["threadId"]
+            assert params["excludeTurns"] is True
         assert params["model"] == "gpt-6.1-terra"
         assert params["config"]["model_reasoning_effort"] == "xhigh"
         assert params["serviceTier"] == "priority"
@@ -44,14 +57,27 @@ for line in sys.stdin:
         assert params["permissions"] == "book-brain"
         assert params["config"]["mcp_servers"]["private_server"]["enabled"] is False
         result = {
-            "thread": {"id": "test-thread"},
+            "thread": {"id": thread_id},
             "activePermissionProfile": {"id": "book-brain"},
             "approvalPolicy": "never",
         }
     elif method == "turn/start":
         assert params["permissions"] == "book-brain"
         question = json.loads(params["input"][0]["text"])["current_question"]
-        emit({"id": request_id, "result": {"turn": {"id": "test-turn"}}})
+        assert params["threadId"] == thread_id
+        turn_id = str(uuid.uuid4())
+        emit(
+            {
+                "method": "item/agentMessage/delta",
+                "params": {
+                    "threadId": thread_id,
+                    "turnId": "earlier-turn",
+                    "itemId": "stale",
+                    "delta": "LEAK",
+                },
+            }
+        )
+        emit({"id": request_id, "result": {"turn": {"id": turn_id}}})
         if question == "EXIT":
             sys.exit(1)
         if question == "HANG":

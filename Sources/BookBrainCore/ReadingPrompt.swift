@@ -27,25 +27,27 @@ public enum ReadingPrompt {
     """
 
   public static func make(book: Book) throws -> String {
-    guard !book.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+    guard !book.currentChat.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
       throw BookBrainError.message("Escreva uma pergunta antes de enviar.")
     }
-    guard book.excerpt.count <= excerptLimit else {
+    guard book.currentChat.excerpt.count <= excerptLimit else {
       throw BookBrainError.message("Selecione um trecho de até 12.000 caracteres.")
     }
-    guard book.question.count <= questionLimit else {
+    guard book.currentChat.question.count <= questionLimit else {
       throw BookBrainError.message("Use uma pergunta de até 4.000 caracteres.")
     }
     guard
-      !book.excerpt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        || !book.exchanges.isEmpty
+      !book.currentChat.excerpt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        || !book.currentChat.exchanges.isEmpty
     else {
       throw BookBrainError.message("Cole um trecho do livro para começar.")
     }
 
     var history: [[String: String]] = []
     var size = 0
-    for exchange in book.exchanges.suffix(exchangeLimit).reversed() {
+    let bootstrap =
+      book.currentChat.threadID == nil ? book.currentChat.exchanges.suffix(exchangeLimit) : []
+    for exchange in bootstrap.reversed() {
       let entry = [
         "question": exchange.question, "answer": exchange.answer,
         "excerpt": exchange.excerpt, "location": exchange.location,
@@ -57,10 +59,10 @@ public enum ReadingPrompt {
     }
     let payload: [String: Any] = [
       "book_title": book.title,
-      "current_location": book.location,
-      "current_excerpt": book.excerpt,
+      "current_location": book.currentChat.location,
+      "current_excerpt": book.currentChat.excerpt,
       "recent_exchanges": history,
-      "current_question": book.question,
+      "current_question": book.currentChat.question,
     ]
     let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
     return String(decoding: data, as: UTF8.self)

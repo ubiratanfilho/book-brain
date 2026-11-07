@@ -8,7 +8,8 @@ Um companheiro de leitura nativo para macOS: copie um trecho no Kindle e convers
 2. Clique em **Ativar captura direta no Kindle…**. No macOS 27 em inglês, abra **System Settings → Privacy & Security → Device Control and Data Access** e ligue **Book Brain**. Em versões anteriores, o painel se chama **Accessibility / Acessibilidade**. Se o interruptor já estiver ligado e o app ainda pedir acesso, encerre o Book Brain com **⌘Q** e reabra a mesma cópia do aplicativo.
 3. No Kindle, selecione um trecho e pressione **⌘⇧B**. O Book Brain aciona o comando Copiar no Kindle e abre a prévia da nova seleção. Para usar a cópia manual, escolha **Copiar** no Kindle e **Colar trecho** no Book Brain.
 4. Confira o trecho, escreva sua pergunta e envie com **⌘Return**.
-5. Use **Livros** para alternar entre leituras. Cada livro tem seu próprio trecho, rascunho e histórico.
+5. Continue perguntando no mesmo chat, inclusive ao trazer outro trecho. **Nova conversa** abre um chat vazio e guarda o anterior. Clique no título da conversa no topo do painel para reabrir um chat do livro. O menu **…** permite renomear ou excluir a conversa da biblioteca local.
+6. Use **Livros** para alternar entre leituras. Cada livro lembra a conversa selecionada. Cada conversa guarda suas perguntas, respostas, referência, trecho em foco e rascunho.
 
 O botão de alfinete mantém a janela acima do Kindle. Fechar a janela mantém o app na barra de menus; **⌘Q** encerra o aplicativo. O atalho só funciona enquanto o Book Brain está em execução. Se outro aplicativo já usa ⌘⇧B, um aviso orienta a usar o botão ou a barra de menus.
 
@@ -34,9 +35,9 @@ O app procura `codex` no PATH, no pacote do ChatGPT/Codex e nas instalações us
 - Janela flutuante, ícone na barra de menus e atalho global.
 - Trecho editável, referência opcional de capítulo/página e sugestões de perguntas.
 - Respostas em streaming, cancelamento e reconexão.
-- Histórico por livro com o trecho exato associado a cada pergunta concluída.
+- Conversas salvas por livro, com o trecho exato associado a cada pergunta concluída. A primeira pergunta dá nome à conversa até você escolher outro título.
 - Rascunhos preservados após erro ou cancelamento; respostas parciais não entram no histórico.
-- Cada pergunta leva o trecho do livro selecionado e até seis trocas recentes desse livro, dentro de um orçamento de 24.000 caracteres de histórico. As memórias locais do Codex podem personalizar exemplos e explicações.
+- Cada pergunta continua na sessão do chat selecionado. As memórias locais do Codex podem personalizar exemplos e explicações.
 
 Não acessa o livro inteiro, não modifica o Kindle e não importa arquivos protegidos. OCR e importação de PDF/EPUB não fazem parte deste protótipo. A cópia depende do conteúdo e das restrições do Kindle; o app não contorna limites de cópia.
 
@@ -44,17 +45,19 @@ Não acessa o livro inteiro, não modifica o Kindle e não importa arquivos prot
 
 - A captura direta usa a permissão de Acessibilidade para enviar ⌘C ao processo do Kindle que estava em primeiro plano ao pressionar **⌘⇧B**. Ela atualiza o clipboard como uma cópia manual. O app exige uma nova publicação após o comando e mostra o trecho antes do envio. Uma seleção sem permissão de cópia não é importada.
 - O conteúdo do clipboard é lido ao acionar o atalho ou **Colar trecho**. Na cópia manual, o contador de alterações registrado quando o Kindle ganhou foco permite detectar uma cópia antiga. A pergunta fica suspensa até você copiar, editar ou escolher continuar com o contexto anterior.
-- Ao enviar uma pergunta, o Codex recebe o título, a referência, o trecho atual, a pergunta e o histórico recente selecionado. O Codex pode incluir o resumo de memórias locais no contexto enviado ao modelo e usar a conversa para gerar memórias futuras.
-- Limites por pergunta: **12.000 caracteres no trecho** e **4.000 na pergunta**. Textos grandes são rejeitados, não cortados silenciosamente. O histórico mais antigo continua salvo no app, mas pode ficar fora do contexto enviado.
+- Ao enviar, o Codex recebe o título do livro, a referência, o trecho atual e a pergunta. Ele usa o contexto da sessão retomada e pode usar e gerar memórias locais.
+- Limites por pergunta: **12.000 caracteres no trecho** e **4.000 na pergunta**. O histórico integral fica disponível no Book Brain. O Codex gerencia a janela de contexto da sessão.
 - Livros, trechos, perguntas, respostas e rascunhos ficam em `~/Library/Application Support/BookBrain/library.json`. O arquivo é texto legível, com permissão `0600`, em uma pasta criada com `0700`. Não há criptografia própria nem sincronização.
 - Arquivos inválidos não são substituídos por uma biblioteca vazia. O app mostra o erro e bloqueia edições para preservar o original.
-- **Excluir livro** remove o registro da biblioteca do Book Brain. O Codex mantém seu próprio histórico e suas memórias no Mac.
+- **Excluir conversa** e **Excluir livro** removem os respectivos registros da biblioteca do Book Brain após confirmação. O Codex mantém seu próprio histórico e suas memórias no Mac.
 
 ## Integração com o Codex
 
-Swift/Foundation inicia um processo `codex app-server` via stdin/stdout. O aplicativo usa `initialize`, `account/read`, `config/read`, `thread/start` e `turn/start`, recebendo eventos JSONL. Não usa portas de rede locais e não automatiza a interface do Codex.
+Swift/Foundation inicia um processo `codex app-server` via stdin/stdout. O aplicativo usa `initialize`, `account/read`, `config/read`, `thread/start`, `thread/resume` e `turn/start`, recebendo eventos JSONL.
 
-Cada pergunta cria uma sessão persistente do Codex para que a conversa possa participar da geração de memórias. A sessão é descarregada ao concluir. O Codex injeta o resumo de memórias disponível e processa conversas elegíveis em segundo plano, conforme os critérios de atividade e uso do próprio Codex.
+A primeira resposta associa o chat a uma sessão persistente do Codex. O Book Brain guarda o identificador e o retoma na próxima pergunta, inclusive depois de fechar o aplicativo. Cada resposta libera a assinatura da sessão quando termina. O Codex processa conversas elegíveis para memória em segundo plano.
+
+Na atualização, o histórico anterior de cada livro vira sua primeira conversa, com todos os trechos, respostas e rascunhos. Como as versões antigas não guardavam um identificador comum de sessão, a primeira pergunta de continuação fornece até seis trocas antigas completas, limitadas a 24.000 caracteres. A partir dela, o Codex retoma a sessão do chat.
 
 Os overrides valem somente para o processo filho. O app habilita o uso e a geração de memórias pelo Codex. As ferramentas dedicadas de memória, o shell, a execução de código, os plugins, os conectores, o navegador, a descoberta de skills e os servidores MCP herdados ficam desabilitados. O perfil `book-brain` permite apenas leitura de caminhos mínimos do runtime e de uma pasta temporária vazia, sem acesso de rede para ferramentas. Pedidos de aprovação/ferramentas são recusados, e um evento de execução inesperado encerra a sessão. O processo do Codex ainda precisa acessar sua autenticação e a rede para inferência.
 

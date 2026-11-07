@@ -47,14 +47,14 @@ final class AppModel: ObservableObject {
   var selectedBook: Book? { library.books.first { $0.id == library.selectedBookID } }
   var isEditable: Bool { canSave && !isBusy && !isImporting }
 
-  func field(_ keyPath: WritableKeyPath<Book, String>) -> Binding<String> {
+  func field(_ keyPath: WritableKeyPath<ReadingChat, String>) -> Binding<String> {
     Binding(
-      get: { self.selectedBook?[keyPath: keyPath] ?? "" },
+      get: { self.selectedBook?.currentChat[keyPath: keyPath] ?? "" },
       set: { value in
         guard self.isEditable,
           let index = self.library.books.firstIndex(where: { $0.id == self.library.selectedBookID })
         else { return }
-        self.library.books[index][keyPath: keyPath] = value
+        self.library.books[index].currentChat[keyPath: keyPath] = value
         if keyPath == \.excerpt { self.captureIssue = nil }
       }
     )
@@ -83,6 +83,16 @@ final class AppModel: ObservableObject {
     library.books.removeAll { $0.id == id }
     captureIssue = nil
     library.selectedBookID = library.books.first?.id
+    saveNow()
+  }
+
+  func changeChat(_ edit: (inout Book) -> Void) {
+    guard isEditable,
+      let index = library.books.firstIndex(where: { $0.id == library.selectedBookID })
+    else { return }
+    edit(&library.books[index])
+    captureIssue = nil
+    notice = nil
     saveNow()
   }
 
@@ -133,7 +143,7 @@ final class AppModel: ObservableObject {
       } else {
         excerpt = try await clipboard.readNewExcerpt()
       }
-      library.books[index].excerpt = excerpt
+      library.books[index].currentChat.excerpt = excerpt
       captureIssue = nil
       focusQuestion += 1
     } catch {
@@ -183,7 +193,7 @@ final class AppModel: ObservableObject {
       return
     }
     isBusy = true
-    pendingQuestion = snapshot.question
+    pendingQuestion = snapshot.currentChat.question
     streamingAnswer = ""
     notice = nil
     saveNow()
@@ -194,16 +204,20 @@ final class AppModel: ObservableObject {
       isConnected = client.isConnected
     }
     do {
-      let answer = try await client.ask(prompt: prompt) { [weak self] text in
+      let answer = try await client.ask(prompt: prompt, threadID: snapshot.currentChat.threadID) {
+        [weak self] text in
         self?.streamingAnswer = text
       }
-      guard let index = library.books.firstIndex(where: { $0.id == snapshot.id }) else { return }
-      library.books[index].exchanges.append(
+      guard let index = library.books.firstIndex(where: { $0.id == snapshot.id }),
+        library.books[index].currentChat.id == snapshot.currentChat.id
+      else { return }
+      library.books[index].currentChat.threadID = answer.threadID
+      library.books[index].currentChat.exchanges.append(
         Exchange(
-          question: snapshot.question, excerpt: snapshot.excerpt,
-          location: snapshot.location, answer: answer
+          question: snapshot.currentChat.question, excerpt: snapshot.currentChat.excerpt,
+          location: snapshot.currentChat.location, answer: answer.text
         ))
-      library.books[index].question = ""
+      library.books[index].currentChat.question = ""
       saveNow()
       focusQuestion += 1
     } catch is CancellationError {

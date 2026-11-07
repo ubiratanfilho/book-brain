@@ -17,7 +17,10 @@ public final class CodexClient {
   private var pending: [Int: CheckedContinuation<[String: Any], Error>] = [:]
   private var deadlines: [Int: Task<Void, Never>] = [:]
   private var answerDeadline: Task<Void, Never>?
+  private var asking = false
   private var activeThread: String?
+  private var activeTurn: String?
+  private var earlyEvents: [[String: Any]] = []
   private var reply: CheckedContinuation<String, Error>?
   private var onUpdate: ((String) -> Void)?
   private var accumulator = AnswerAccumulator()
@@ -113,7 +116,7 @@ public final class CodexClient {
       _ = try await request(
         "initialize",
         [
-          "clientInfo": ["name": "book_brain", "title": "Book Brain", "version": "0.2.0"],
+          "clientInfo": ["name": "book_brain", "title": "Book Brain", "version": "0.3.0"],
           "capabilities": ["experimentalApi": true],
         ])
       try write(["method": "initialized"])
@@ -141,22 +144,19 @@ public final class CodexClient {
     }
   }
 
-  public func ask(prompt: String, onUpdate: @escaping (String) -> Void) async throws -> String {
-    guard isConnected, let directory = workingDirectory else {
-      throw BookBrainError.message("Conecte ao Codex antes de enviar.")
+  private func loadThread(_ savedID: String?, in directory: URL) async throws -> String {
+    var params: [String: Any] = [
+      "model": model, "serviceTier": "priority", "cwd": directory.path,
+      "approvalPolicy": "never", "permissions": "book-brain",
+      "baseInstructions": ReadingPrompt.instructions,
+      "developerInstructions": "This is a text-only reading conversation. Do not use any tools.",
+      "config": threadConfig,
+    ]
+    if let savedID {
+      params["threadId"] = savedID
+      params["excludeTurns"] = true
     }
-    guard activeThread == nil else {
-      throw BookBrainError.message("Aguarde a resposta atual.")
-    }
-    let result = try await request(
-      "thread/start",
-      [
-        "model": model, "serviceTier": "priority", "cwd": directory.path,
-        "approvalPolicy": "never", "permissions": "book-brain",
-        "baseInstructions": ReadingPrompt.instructions,
-        "developerInstructions": "This is a text-only reading conversation. Do not use any tools.",
-        "config": threadConfig,
-      ])
+    let result = try await request(savedID == nil ? "thread/start" : "thread/resume", params)
     guard let profile = result["activePermissionProfile"] as? [String: Any],
       profile["id"] as? String == "book-brain",
       result["approvalPolicy"] as? String == "never"
@@ -166,9 +166,38 @@ public final class CodexClient {
       stop(error: error)
       throw error
     }
-    guard let thread = result["thread"] as? [String: Any], let id = thread["id"] as? String else {
+    guard let thread = result["thread"] as? [String: Any], let id = thread["id"] as? String,
+      savedID == nil || savedID == id
+    else {
       throw BookBrainError.message("O Codex não iniciou a conversa.")
     }
+    return id
+  }
+
+  public func ask(prompt: String, threadID: String?, onUpdate: @escaping (String) -> Void)
+    async throws -> (text: String, threadID: String)
+  {
+    guard isConnected, let directory = workingDirectory else {
+      throw BookBrainError.message("Conecte ao Codex antes de enviar.")
+    }
+    guard !asking else { throw BookBrainError.message("Aguarde a resposta atual.") }
+    asking = true
+    defer { asking = false }
+    let id = try await loadThread(threadID, in: directory)
+    let result: Result<String, Error>
+    do {
+      result = .success(try await runTurn(in: id, prompt: prompt, onUpdate: onUpdate))
+    } catch {
+      result = .failure(error)
+    }
+    // Release an idle chat for Codex memory processing before the next resume.
+    if isConnected { _ = try? await request("thread/unsubscribe", ["threadId": id]) }
+    return (try result.get(), id)
+  }
+
+  private func runTurn(in id: String, prompt: String, onUpdate: @escaping (String) -> Void)
+    async throws -> String
+  {
     activeThread = id
     accumulator = AnswerAccumulator()
     self.onUpdate = onUpdate
@@ -185,13 +214,21 @@ public final class CodexClient {
       }
       Task {
         do {
-          _ = try await request(
+          let result = try await request(
             "turn/start",
             [
               "threadId": id, "input": [["type": "text", "text": prompt]],
               "approvalPolicy": "never",
               "permissions": "book-brain",
             ])
+          guard let turn = result["turn"] as? [String: Any], let turnID = turn["id"] as? String
+          else {
+            throw BookBrainError.message("O Codex não identificou esta resposta.")
+          }
+          activeTurn = turnID
+          let events = earlyEvents
+          earlyEvents.removeAll()
+          for event in events { receive(event) }
         } catch { finish(.failure(error)) }
       }
     }
@@ -255,6 +292,19 @@ public final class CodexClient {
       let params = message["params"] as? [String: Any],
       let activeThread, params["threadId"] as? String == activeThread
     else { return }
+    guard
+      ["item/agentMessage/delta", "item/started", "item/completed", "turn/completed"].contains(
+        method)
+    else { return }
+    // A batch can include the start response and the first notifications before
+    // the awaiting task resumes. Match both IDs once that response is available.
+    guard let activeTurn else {
+      earlyEvents.append(message)
+      return
+    }
+    let eventTurn =
+      (params["turn"] as? [String: Any])?["id"] as? String ?? params["turnId"] as? String
+    guard eventTurn == activeTurn else { return }
     switch method {
     case "item/agentMessage/delta":
       if let id = params["itemId"] as? String, let delta = params["delta"] as? String {
@@ -303,15 +353,13 @@ public final class CodexClient {
   private func finish(_ result: Result<String, Error>) {
     answerDeadline?.cancel()
     answerDeadline = nil
-    let thread = activeThread
     activeThread = nil
+    activeTurn = nil
+    earlyEvents.removeAll()
     onUpdate = nil
     let continuation = reply
     reply = nil
     continuation?.resume(with: result)
-    if let thread, isConnected {
-      Task { _ = try? await request("thread/unsubscribe", ["threadId": thread]) }
-    }
   }
 
   private func stop(error: Error) {

@@ -17,6 +17,7 @@ struct ContentView: View {
   @State private var newTitle = ""
   @State private var confirmDelete = false
   @State private var editingCompactExcerpt = false
+  @State private var showChats = false
   @FocusState private var questionFocused: Bool
 
   var body: some View {
@@ -25,6 +26,27 @@ struct ContentView: View {
       VStack(spacing: 0) {
         header(compact: compact)
         if let book = model.selectedBook {
+          HStack(spacing: 8) {
+            Button {
+              showChats = true
+            } label: {
+              HStack(spacing: 5) {
+                Image(systemName: "bubble.left.and.bubble.right")
+                Text(book.currentChat.title).lineLimit(1).truncationMode(.tail)
+                Image(systemName: "chevron.down").font(.caption2)
+              }
+            }.buttonStyle(.plain)
+              .help("Histórico de conversas deste livro")
+              .accessibilityLabel("Histórico de conversas")
+              .accessibilityValue(book.currentChat.title)
+            Spacer(minLength: 0)
+            Button {
+              model.changeChat { $0.newChat() }
+            } label: {
+              Label("Nova conversa", systemImage: "square.and.pencil").fixedSize()
+            }.disabled(book.currentChat.isBlank)
+          }.font(.system(size: 12)).disabled(!model.isEditable)
+            .padding(.horizontal, compact ? 12 : 24).padding(.vertical, compact ? 5 : 8)
           if !compact {
             notices
             bookHeader(book, compact: false)
@@ -41,6 +63,10 @@ struct ContentView: View {
       }
       .sheet(isPresented: $model.showNewBook) {
         newBookSheet.frame(width: min(400, geometry.size.width))
+      }
+      .sheet(isPresented: $showChats) {
+        ChatHistoryView(model: model)
+          .frame(width: min(450, geometry.size.width), height: min(430, geometry.size.height))
       }
     }
     .background(Palette.paper)
@@ -197,19 +223,22 @@ struct ContentView: View {
       if let issue = model.captureIssue {
         VStack(alignment: .leading, spacing: 7) {
           Label(issue, systemImage: "doc.on.clipboard").fixedSize(horizontal: false, vertical: true)
-          if !book.excerpt.isEmpty || !book.exchanges.isEmpty {
+          if !book.currentChat.excerpt.isEmpty || !book.currentChat.exchanges.isEmpty {
             Button("Continuar com o contexto anterior") { model.captureIssue = nil }
           }
         }.font(.system(size: 12))
           .padding(10).background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
       }
       if compact && !editingCompactExcerpt {
-        Text(book.excerpt.isEmpty ? "Selecione um trecho no Kindle e pressione ⌘⇧B." : book.excerpt)
-          .font(.system(size: 12, design: .serif)).lineLimit(2)
-          .frame(maxWidth: .infinity, alignment: .leading)
+        Text(
+          book.currentChat.excerpt.isEmpty
+            ? "Selecione um trecho no Kindle e pressione ⌘⇧B." : book.currentChat.excerpt
+        )
+        .font(.system(size: 12, design: .serif)).lineLimit(2)
+        .frame(maxWidth: .infinity, alignment: .leading)
       } else {
         ZStack(alignment: .topLeading) {
-          if book.excerpt.isEmpty {
+          if book.currentChat.excerpt.isEmpty {
             Text("Selecione um trecho no Kindle e pressione ⌘⇧B, ou cole o texto aqui.")
               .font(.system(size: 13)).foregroundStyle(Palette.muted)
               .padding(.horizontal, 5).padding(.top, 8).allowsHitTesting(false)
@@ -223,8 +252,9 @@ struct ContentView: View {
         }
         HStack {
           Spacer()
-          Text("\(book.excerpt.count.formatted()) / 12.000")
-            .foregroundStyle(book.excerpt.count > ReadingPrompt.excerptLimit ? .red : Palette.muted)
+          Text("\(book.currentChat.excerpt.count.formatted()) / 12.000")
+            .foregroundStyle(
+              book.currentChat.excerpt.count > ReadingPrompt.excerptLimit ? .red : Palette.muted)
         }.font(.system(size: 10)).foregroundStyle(Palette.muted)
       }
     }
@@ -245,7 +275,7 @@ struct ContentView: View {
               excerptCard(book, compact: true)
             }.id("context")
           }
-          if book.exchanges.isEmpty && !model.isBusy {
+          if book.currentChat.exchanges.isEmpty && !model.isBusy {
             VStack(alignment: .leading, spacing: 12) {
               VStack(alignment: .leading, spacing: 8) {
                 suggestion("Me explica com um exemplo", icon: "lightbulb")
@@ -254,7 +284,7 @@ struct ContentView: View {
               }.padding(.top, 6)
             }.padding(.vertical, compact ? 0 : 12)
           }
-          ForEach(book.exchanges) { exchange in
+          ForEach(book.currentChat.exchanges) { exchange in
             VStack(alignment: .leading, spacing: 14) {
               questionBubble(exchange.question)
               if !exchange.excerpt.isEmpty {
@@ -283,16 +313,18 @@ struct ContentView: View {
         }.padding(.horizontal, compact ? 12 : 24).padding(.vertical, compact ? 8 : 20)
       }
       .onChange(of: model.streamingAnswer) { _, _ in proxy.scrollTo("bottom", anchor: .bottom) }
-      .onChange(of: book.exchanges.count) { _, _ in proxy.scrollTo("bottom", anchor: .bottom) }
+      .onChange(of: book.currentChat.exchanges.count) { _, _ in
+        proxy.scrollTo("bottom", anchor: .bottom)
+      }
       .onChange(of: model.isBusy) { _, _ in proxy.scrollTo("bottom", anchor: .bottom) }
-      .onChange(of: book.id) { _, _ in
+      .onChange(of: book.currentChat.id) { _, _ in
         editingCompactExcerpt = false
         proxy.scrollTo(compact ? "context" : "bottom", anchor: compact ? .top : .bottom)
       }
       .onChange(of: model.captureIssue) { _, issue in
         if compact && issue != nil { proxy.scrollTo("context", anchor: .top) }
       }
-      .onChange(of: book.excerpt) { _, _ in
+      .onChange(of: book.currentChat.excerpt) { _, _ in
         if compact && !editingCompactExcerpt { proxy.scrollTo("context", anchor: .top) }
       }
     }
@@ -320,7 +352,7 @@ struct ContentView: View {
           .accessibilityLabel("Enviar pergunta")
           .disabled(
             !model.isConnected || !model.isEditable || model.captureIssue != nil
-              || book.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+              || book.currentChat.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
       }
       .padding(compact ? 8 : 14).background(.white, in: RoundedRectangle(cornerRadius: 12))
@@ -329,7 +361,7 @@ struct ContentView: View {
         Text(
           compact
             ? "Trecho e histórico no Codex. Memórias ativadas."
-            : "O Codex recebe o trecho e até 6 trocas recentes. Pode usar e gerar memórias."
+            : "A pergunta e o trecho vão para esta conversa no Codex. Memórias ativadas."
         )
         .fixedSize(horizontal: false, vertical: true)
         Spacer()
