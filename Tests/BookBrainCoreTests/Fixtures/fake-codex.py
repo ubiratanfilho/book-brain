@@ -24,6 +24,12 @@ for line in sys.stdin:
     params = request.get("params", {})
     result = {}
     if method == "initialize":
+        assert "features.memories=true" in sys.argv
+        assert "memories.use_memories=true" in sys.argv
+        assert "memories.generate_memories=true" in sys.argv
+        assert (
+            "features.memory_tool=false" not in sys.argv
+        )  # Legacy alias for memories.
         result = {"userAgent": "fake-codex"}
     elif method == "account/read":
         result = {"account": {"type": "chatgpt"}, "requiresOpenaiAuth": True}
@@ -33,7 +39,7 @@ for line in sys.stdin:
         assert params["model"] == "gpt-6.1-terra"
         assert params["config"]["model_reasoning_effort"] == "xhigh"
         assert params["serviceTier"] == "priority"
-        assert params["ephemeral"] is True
+        assert not params.get("ephemeral", False)
         assert params["approvalPolicy"] == "never"
         assert params["permissions"] == "book-brain"
         assert params["config"]["mcp_servers"]["private_server"]["enabled"] is False

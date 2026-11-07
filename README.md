@@ -36,7 +36,7 @@ O app procura `codex` no PATH, no pacote do ChatGPT/Codex e nas instalações us
 - Respostas em streaming, cancelamento e reconexão.
 - Histórico por livro com o trecho exato associado a cada pergunta concluída.
 - Rascunhos preservados após erro ou cancelamento; respostas parciais não entram no histórico.
-- Contexto limitado ao livro selecionado: trecho atual, pergunta e até seis trocas recentes completas, dentro de um orçamento de 24.000 caracteres de histórico.
+- Cada pergunta leva o trecho do livro selecionado e até seis trocas recentes desse livro, dentro de um orçamento de 24.000 caracteres de histórico. As memórias locais do Codex podem personalizar exemplos e explicações.
 
 Não acessa o livro inteiro, não modifica o Kindle e não importa arquivos protegidos. OCR e importação de PDF/EPUB não fazem parte deste protótipo. A cópia depende do conteúdo e das restrições do Kindle; o app não contorna limites de cópia.
 
@@ -44,19 +44,19 @@ Não acessa o livro inteiro, não modifica o Kindle e não importa arquivos prot
 
 - A captura direta usa a permissão de Acessibilidade para enviar ⌘C ao processo do Kindle que estava em primeiro plano ao pressionar **⌘⇧B**. Ela atualiza o clipboard como uma cópia manual. O app exige uma nova publicação após o comando e mostra o trecho antes do envio. Uma seleção sem permissão de cópia não é importada.
 - O conteúdo do clipboard é lido ao acionar o atalho ou **Colar trecho**. Na cópia manual, o contador de alterações registrado quando o Kindle ganhou foco permite detectar uma cópia antiga. A pergunta fica suspensa até você copiar, editar ou escolher continuar com o contexto anterior.
-- Ao enviar uma pergunta, o título, referência, trecho atual, pergunta e histórico recente selecionado são enviados ao Codex para processamento pelo provedor configurado. O app mostra esse aviso junto ao campo de envio.
+- Ao enviar uma pergunta, o Codex recebe o título, a referência, o trecho atual, a pergunta e o histórico recente selecionado. O Codex pode incluir o resumo de memórias locais no contexto enviado ao modelo e usar a conversa para gerar memórias futuras.
 - Limites por pergunta: **12.000 caracteres no trecho** e **4.000 na pergunta**. Textos grandes são rejeitados, não cortados silenciosamente. O histórico mais antigo continua salvo no app, mas pode ficar fora do contexto enviado.
 - Livros, trechos, perguntas, respostas e rascunhos ficam em `~/Library/Application Support/BookBrain/library.json`. O arquivo é texto legível, com permissão `0600`, em uma pasta criada com `0700`. Não há criptografia própria nem sincronização.
 - Arquivos inválidos não são substituídos por uma biblioteca vazia. O app mostra o erro e bloqueia edições para preservar o original.
-- **Excluir livro** remove seu registro local após confirmação. Não apaga dados do Kindle nem constitui uma solicitação de exclusão ao provedor de IA.
+- **Excluir livro** remove o registro da biblioteca do Book Brain. O Codex mantém seu próprio histórico e suas memórias no Mac.
 
 ## Integração com o Codex
 
 Swift/Foundation inicia um processo `codex app-server` via stdin/stdout. O aplicativo usa `initialize`, `account/read`, `config/read`, `thread/start` e `turn/start`, recebendo eventos JSONL. Não usa portas de rede locais e não automatiza a interface do Codex.
 
-Cada pergunta cria uma sessão efêmera com o contexto delimitado pelo app; a sessão é descarregada ao concluir. O histórico persistente é o arquivo local do Book Brain. Sessões efêmeras não alteram as políticas de retenção do provedor.
+Cada pergunta cria uma sessão persistente do Codex para que a conversa possa participar da geração de memórias. A sessão é descarregada ao concluir. O Codex injeta o resumo de memórias disponível e processa conversas elegíveis em segundo plano, conforme os critérios de atividade e uso do próprio Codex.
 
-Os overrides valem somente para o processo filho. O app desabilita shell, execução de código, plugins, conectores, navegador, memória e descoberta de skills; desabilita individualmente os servidores MCP herdados. O perfil `book-brain` permite apenas leitura de caminhos mínimos do runtime e de uma pasta temporária vazia, sem acesso de rede para ferramentas. Pedidos de aprovação/ferramentas são recusados, e um evento de execução inesperado encerra a sessão. O processo do Codex ainda precisa acessar sua autenticação e a rede para inferência.
+Os overrides valem somente para o processo filho. O app habilita o uso e a geração de memórias pelo Codex. As ferramentas dedicadas de memória, o shell, a execução de código, os plugins, os conectores, o navegador, a descoberta de skills e os servidores MCP herdados ficam desabilitados. O perfil `book-brain` permite apenas leitura de caminhos mínimos do runtime e de uma pasta temporária vazia, sem acesso de rede para ferramentas. Pedidos de aprovação/ferramentas são recusados, e um evento de execução inesperado encerra a sessão. O processo do Codex ainda precisa acessar sua autenticação e a rede para inferência.
 
 O Book Brain usa **GPT-6.1 Terra** (`gpt-6.1-terra`) com raciocínio **Extra High** (`xhigh`) e modo **Fast** (`priority`) em cada pergunta. A configuração é específica das conversas do aplicativo. A API de perfis de permissões é experimental: atualizações do Codex podem exigir ajustes. Falhas são exibidas; não há fallback para permissões mais amplas.
 

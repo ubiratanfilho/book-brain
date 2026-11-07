@@ -328,8 +328,8 @@ struct ContentView: View {
       HStack(alignment: .top) {
         Text(
           compact
-            ? "Envia o trecho e o histórico recente ao Codex."
-            : "Ao enviar, o trecho e até 6 trocas recentes vão ao Codex."
+            ? "Trecho e histórico no Codex. Memórias ativadas."
+            : "O Codex recebe o trecho e até 6 trocas recentes. Pode usar e gerar memórias."
         )
         .fixedSize(horizontal: false, vertical: true)
         Spacer()
@@ -370,7 +370,7 @@ struct ContentView: View {
       }
       .padding(18).background(.white.opacity(0.6), in: RoundedRectangle(cornerRadius: 14))
       Text(
-        "Histórico salvo neste Mac. Somente o contexto da pergunta é enviado quando você pede uma resposta."
+        "Histórico salvo neste Mac. Ao enviar uma pergunta, o Codex pode usar suas memórias e aprender com a conversa."
       )
       .font(.system(size: 11)).foregroundStyle(Palette.muted).lineSpacing(3)
     }.padding(32)
