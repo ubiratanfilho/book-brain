@@ -2,6 +2,11 @@ import AppKit
 import BookBrainCore
 import SwiftUI
 
+enum PassageSource {
+  case paste
+  case shortcut(kindle: NSRunningApplication?)
+}
+
 @MainActor
 final class AppModel: ObservableObject {
   @Published var library: Library { didSet { scheduleSave() } }
@@ -161,7 +166,7 @@ final class AppModel: ObservableObject {
     }
   }
 
-  func pasteExcerpt(from kindle: NSRunningApplication? = nil) async {
+  func pasteExcerpt(_ source: PassageSource = .paste) async {
     guard !isImporting else { return }
     guard isEditable else {
       notice = "Wait for the current reply or click Stop before changing the passage."
@@ -177,7 +182,7 @@ final class AppModel: ObservableObject {
     notice = nil
     do {
       let excerpt: String
-      if let kindle {
+      if case .shortcut(let kindle?) = source {
         refreshCopyAccess()
         if canCopyFromKindle {
           excerpt = try await clipboard.readNewExcerpt { try KindleSelection.copy(in: kindle) }
@@ -189,7 +194,10 @@ final class AppModel: ObservableObject {
       } else {
         excerpt = try await clipboard.readNewExcerpt()
       }
-      library.books[index].currentChat.excerpt = excerpt
+      switch source {
+      case .shortcut: library.books[index].captureKindlePassage(excerpt)
+      case .paste: library.books[index].currentChat.excerpt = excerpt
+      }
       captureIssue = nil
       focusQuestion += 1
     } catch {

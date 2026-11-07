@@ -201,6 +201,7 @@ struct ContentView: View {
       TextField("Chapter or page · optional", text: model.field(\.location))
         .textFieldStyle(.plain).font(.system(size: 12)).foregroundStyle(Palette.muted)
         .accessibilityLabel("Chapter or page")
+        .help("Kindle citations can fill this in when you press ⌘⇧B. You can edit it here.")
         .disabled(!model.isEditable)
     }
     .padding(.horizontal, compact ? 0 : 24).padding(.top, compact ? 0 : 20).padding(

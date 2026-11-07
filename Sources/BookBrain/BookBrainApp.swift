@@ -42,8 +42,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     shortcut = GlobalHotKey { [weak self] in
       MainActor.assumeIsolated {
         let frontmost = NSWorkspace.shared.frontmostApplication
-        self?.captureAndShow(
-          from: frontmost?.bundleIdentifier == KindleSelection.bundleID ? frontmost : nil)
+        let kindle = frontmost?.bundleIdentifier == KindleSelection.bundleID ? frontmost : nil
+        self?.captureAndShow(.shortcut(kindle: kindle))
       }
     }
     let root = ContentView(
@@ -154,13 +154,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
   }
 
   @objc private func pasteFromMenu() {
-    captureAndShow(from: nil)
+    captureAndShow(.paste)
   }
 
-  private func captureAndShow(from kindle: NSRunningApplication?) {
+  private func captureAndShow(_ source: PassageSource) {
     Task {
       guard !model.isImporting else { return }
-      await model.pasteExcerpt(from: kindle)
+      await model.pasteExcerpt(source)
       showWindow()
     }
   }
