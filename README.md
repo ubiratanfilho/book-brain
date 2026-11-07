@@ -26,7 +26,7 @@ Arraste uma borda para ajustar a janela até **300 × 280 pontos** ou use o bot�
 open "build/Book Brain.app"
 ```
 
-O build gera um `.app` com assinatura ad hoc para uso local, na arquitetura do Mac que compila. Não é uma distribuição notarizada ou universal. Não é necessário instalar dependências Swift externas.
+O build gera um `.app` com assinatura ad hoc para uso local, na arquitetura do Mac que compila. Não é uma distribuição notarizada ou universal. Na primeira compilação, o Swift Package Manager baixa o MarkdownUI e suas dependências para renderizar as respostas.
 
 O app procura `codex` no PATH, no pacote do ChatGPT/Codex e nas instalações usuais do Homebrew. Se não o encontrar, use **Localizar executável do Codex…** no menu de conexão. A autenticação continua sendo gerenciada pelo Codex; o Book Brain não lê nem copia tokens. O uso segue a conta e os limites configurados no Codex.
 

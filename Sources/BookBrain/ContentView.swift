@@ -442,8 +442,7 @@ struct ContentView: View {
     VStack(alignment: .leading, spacing: 9) {
       Label("BOOK BRAIN", systemImage: "sparkle")
         .font(.system(size: 9, weight: .semibold)).tracking(1.5).foregroundStyle(Palette.green)
-      Text(.init(text)).font(.system(size: 14)).lineSpacing(5).textSelection(.enabled)
-        .frame(maxWidth: .infinity, alignment: .leading)
+      AnswerMarkdown(source: text).equatable()
     }
   }
 

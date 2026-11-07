@@ -121,7 +121,7 @@ public final class CodexClient {
       _ = try await request(
         "initialize",
         [
-          "clientInfo": ["name": "book_brain", "title": "Book Brain", "version": "0.4.0"],
+          "clientInfo": ["name": "book_brain", "title": "Book Brain", "version": "0.4.1"],
           "capabilities": ["experimentalApi": true],
         ])
       try write(["method": "initialized"])
