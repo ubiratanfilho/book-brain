@@ -11,6 +11,7 @@ private enum Palette {
 
 struct ContentView: View {
   @ObservedObject var model: AppModel
+  let shortcutAvailable: Bool
   let setFloating: (Bool) -> Void
   @State private var newTitle = ""
   @State private var confirmDelete = false
@@ -19,6 +20,11 @@ struct ContentView: View {
   var body: some View {
     VStack(spacing: 0) {
       header
+      if !shortcutAvailable {
+        banner(
+          "O atalho ⌘⇧B está indisponível. Use Colar trecho na janela ou na barra de menus.",
+          isError: true)
+      }
       if let error = model.storageError { banner(error, isError: true) }
       if let notice = model.notice { banner(notice, isError: false) }
       if let book = model.selectedBook {

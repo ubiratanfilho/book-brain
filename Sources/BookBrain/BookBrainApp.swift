@@ -2,11 +2,13 @@ import AppKit
 import SwiftUI
 
 @main
-struct BookBrainApp: App {
-  @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
-
-  var body: some Scene {
-    Settings { EmptyView() }
+enum BookBrainApp {
+  @MainActor
+  static func main() {
+    let application = NSApplication.shared
+    let delegate = AppDelegate()
+    application.delegate = delegate
+    withExtendedLifetime(delegate) { application.run() }
   }
 }
 
@@ -19,9 +21,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     NSApp.setActivationPolicy(.regular)
-    let root = ContentView(model: model) { [weak self] floating in
-      self?.window.level = floating ? .floating : .normal
-    }
     window = NSWindow(
       contentRect: NSRect(x: 0, y: 0, width: 600, height: 830),
       styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
@@ -36,20 +35,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
     window.isReleasedWhenClosed = false
     window.delegate = self
-    window.contentView = NSHostingView(rootView: root)
-    window.setFrameAutosaveName("BookBrainWindow")
-    if !window.setFrameUsingName("BookBrainWindow") { window.center() }
-    makeMenu()
     shortcut = GlobalHotKey { [weak self] in
       MainActor.assumeIsolated {
         self?.showWindow()
         self?.model.pasteExcerpt()
       }
     }
-    if shortcut?.register() != true {
-      model.notice =
-        "⌘⇧B está em uso por outro app. Use Colar trecho na janela ou na barra de menus."
+    let root = ContentView(model: model, shortcutAvailable: shortcut?.register() == true) {
+      [weak self] floating in
+      self?.window.level = floating ? .floating : .normal
     }
+    window.contentView = NSHostingView(rootView: root)
+    window.setFrameAutosaveName("BookBrainWindow")
+    if !window.setFrameUsingName("BookBrainWindow") { window.center() }
+    makeMenu()
     showWindow()
     Task { await model.connect() }
   }
