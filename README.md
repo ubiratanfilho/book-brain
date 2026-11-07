@@ -5,7 +5,7 @@ Um companheiro de leitura nativo para macOS: copie um trecho no Kindle e convers
 ## Usar
 
 1. Abra **Book Brain** e adicione o título do livro. O aplicativo tenta conectar à sessão local do Codex.
-2. Para habilitar o atalho direto, clique em **Ativar captura direta no Kindle…** e autorize o Book Brain em **Privacidade e Segurança → Acessibilidade** nos Ajustes do Sistema.
+2. Clique em **Ativar captura direta no Kindle…**. No macOS 27 em inglês, abra **System Settings → Privacy & Security → Device Control and Data Access** e ligue **Book Brain**. Em versões anteriores, o painel se chama **Accessibility / Acessibilidade**. Se o interruptor já estiver ligado e o app ainda pedir acesso, encerre o Book Brain com **⌘Q** e reabra a mesma cópia do aplicativo.
 3. No Kindle, selecione um trecho e pressione **⌘⇧B**. O Book Brain aciona o comando Copiar no Kindle e abre a prévia da nova seleção. Para usar a cópia manual, escolha **Copiar** no Kindle e **Colar trecho** no Book Brain.
 4. Confira o trecho, escreva sua pergunta e envie com **⌘Return**.
 5. Use **Livros** para alternar entre leituras. Cada livro tem seu próprio trecho, rascunho e histórico.
