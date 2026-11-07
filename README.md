@@ -5,7 +5,7 @@ Um companheiro de leitura nativo para macOS: copie um trecho no Kindle e convers
 ## Usar
 
 1. Abra **Book Brain** e adicione o título do livro. O aplicativo tenta conectar à sessão local do Codex.
-2. No Kindle, selecione um trecho e copie com **⌘C**.
+2. No Kindle, selecione um trecho e clique em **Copiar** no menu da seleção ou use **⌘C**.
 3. Pressione **⌘⇧B** para abrir o Book Brain e trazer o texto copiado. Você também pode clicar em **Colar trecho** ou colar diretamente no campo.
 4. Confira o trecho, escreva sua pergunta e envie com **⌘Return**.
 5. Use **Livros** para alternar entre leituras. Cada livro tem seu próprio trecho, rascunho e histórico.
@@ -40,7 +40,7 @@ Não acessa o livro inteiro, não modifica o Kindle e não importa arquivos prot
 
 ## Dados e limites
 
-- O clipboard é consultado apenas ao acionar **⌘⇧B** ou **Colar trecho**. Não há monitoramento em segundo plano, captura de tela ou permissão de acessibilidade.
+- O conteúdo do clipboard é lido ao acionar **⌘⇧B** ou **Colar trecho**. Quando o Kindle ganha foco, o app registra apenas o contador de alterações do clipboard. Ao importar, aguarda brevemente a conclusão da cópia. Se o contador continuar igual ao da entrada no Kindle ou ao da última importação, o app avisa e suspende o envio até você copiar, editar ou escolher continuar com o contexto anterior.
 - Ao enviar uma pergunta, o título, referência, trecho atual, pergunta e histórico recente selecionado são enviados ao Codex para processamento pelo provedor configurado. O app mostra esse aviso junto ao campo de envio.
 - Limites por pergunta: **12.000 caracteres no trecho** e **4.000 na pergunta**. Textos grandes são rejeitados, não cortados silenciosamente. O histórico mais antigo continua salvo no app, mas pode ficar fora do contexto enviado.
 - Livros, trechos, perguntas, respostas e rascunhos ficam em `~/Library/Application Support/BookBrain/library.json`. O arquivo é texto legível, com permissão `0600`, em uma pasta criada com `0700`. Não há criptografia própria nem sincronização.

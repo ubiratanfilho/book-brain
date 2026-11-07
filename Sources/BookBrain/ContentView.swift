@@ -131,7 +131,7 @@ struct ContentView: View {
           .font(.system(size: 12, weight: .semibold))
         Spacer()
         Button {
-          model.pasteExcerpt()
+          Task { await model.pasteExcerpt() }
         } label: {
           HStack(spacing: 5) {
             Image(systemName: "doc.on.clipboard")
@@ -140,6 +140,15 @@ struct ContentView: View {
           }.font(.system(size: 11, weight: .medium))
         }
         .buttonStyle(.plain).disabled(!model.isEditable)
+      }
+      if let issue = model.captureIssue {
+        VStack(alignment: .leading, spacing: 7) {
+          Label(issue, systemImage: "doc.on.clipboard").fixedSize(horizontal: false, vertical: true)
+          if !book.excerpt.isEmpty || !book.exchanges.isEmpty {
+            Button("Continuar com o contexto anterior") { model.captureIssue = nil }
+          }
+        }.font(.system(size: 12))
+          .padding(10).background(Color.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
       }
       ZStack(alignment: .topLeading) {
         if book.excerpt.isEmpty {
@@ -240,7 +249,7 @@ struct ContentView: View {
           .keyboardShortcut(.return, modifiers: .command)
           .accessibilityLabel("Enviar pergunta")
           .disabled(
-            !model.isConnected
+            !model.isConnected || !model.isEditable || model.captureIssue != nil
               || book.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
       }

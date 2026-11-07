@@ -6,6 +6,8 @@ import SwiftUI
 final class AppModel: ObservableObject {
   @Published var library: Library { didSet { scheduleSave() } }
   @Published var notice: String?
+  @Published var captureIssue: String?
+  @Published private(set) var isImporting = false
   @Published var storageError: String?
   @Published var isConnecting = false
   @Published var isConnected = false
@@ -18,6 +20,7 @@ final class AppModel: ObservableObject {
   @Published var focusQuestion = 0
 
   let store: LibraryStore
+  let clipboard = PassageClipboard(.general)
   private var client: CodexClient?
   private var saveTask: Task<Void, Never>?
   private var canSave = false
@@ -41,7 +44,7 @@ final class AppModel: ObservableObject {
   }
 
   var selectedBook: Book? { library.books.first { $0.id == library.selectedBookID } }
-  var isEditable: Bool { canSave && !isBusy }
+  var isEditable: Bool { canSave && !isBusy && !isImporting }
 
   func field(_ keyPath: WritableKeyPath<Book, String>) -> Binding<String> {
     Binding(
@@ -51,6 +54,7 @@ final class AppModel: ObservableObject {
           let index = self.library.books.firstIndex(where: { $0.id == self.library.selectedBookID })
         else { return }
         self.library.books[index][keyPath: keyPath] = value
+        if keyPath == \.excerpt { self.captureIssue = nil }
       }
     )
   }
@@ -61,6 +65,7 @@ final class AppModel: ObservableObject {
     guard !name.isEmpty else { return }
     let book = Book(title: String(name.prefix(200)))
     library.books.append(book)
+    captureIssue = nil
     library.selectedBookID = book.id
     saveNow()
   }
@@ -68,39 +73,40 @@ final class AppModel: ObservableObject {
   func selectBook(_ id: UUID) {
     guard isEditable else { return }
     library.selectedBookID = id
+    captureIssue = nil
     notice = nil
   }
 
   func deleteSelectedBook() {
     guard isEditable, let id = library.selectedBookID else { return }
     library.books.removeAll { $0.id == id }
+    captureIssue = nil
     library.selectedBookID = library.books.first?.id
     saveNow()
   }
 
-  func pasteExcerpt() {
+  func pasteExcerpt() async {
+    guard !isImporting else { return }
     guard isEditable else {
       notice = "Aguarde a resposta atual ou clique em Parar antes de trocar o trecho."
       return
     }
-    guard selectedBook != nil else {
+    guard let index = library.books.firstIndex(where: { $0.id == library.selectedBookID }) else {
       showNewBook = true
       notice = "Adicione o livro e clique em Colar trecho."
       return
     }
-    guard let text = NSPasteboard.general.string(forType: .string),
-      !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    else {
-      notice = "Copie um trecho no Kindle com ⌘C e tente novamente."
-      return
-    }
-    guard text.count <= ReadingPrompt.excerptLimit else {
-      notice = "O texto copiado ultrapassa 12.000 caracteres. Copie um trecho menor."
-      return
-    }
-    field(\.excerpt).wrappedValue = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    isImporting = true
+    defer { isImporting = false }
     notice = nil
-    focusQuestion += 1
+    do {
+      let excerpt = try await clipboard.readNewExcerpt()
+      library.books[index].excerpt = excerpt
+      captureIssue = nil
+      focusQuestion += 1
+    } catch {
+      captureIssue = error.localizedDescription
+    }
   }
 
   func connect() async {
@@ -137,7 +143,8 @@ final class AppModel: ObservableObject {
   }
 
   func send() async {
-    guard !isBusy, isConnected, let client, let snapshot = selectedBook else { return }
+    guard isEditable, captureIssue == nil, isConnected, let client, let snapshot = selectedBook
+    else { return }
     let prompt: String
     do { prompt = try ReadingPrompt.make(book: snapshot) } catch {
       notice = error.localizedDescription

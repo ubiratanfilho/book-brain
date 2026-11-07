@@ -35,19 +35,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
     window.isReleasedWhenClosed = false
     window.delegate = self
+    NSWorkspace.shared.notificationCenter.addObserver(
+      self, selector: #selector(applicationActivated(_:)),
+      name: NSWorkspace.didActivateApplicationNotification, object: nil)
     shortcut = GlobalHotKey { [weak self] in
-      MainActor.assumeIsolated {
-        self?.showWindow()
-        self?.model.pasteExcerpt()
-      }
+      MainActor.assumeIsolated { self?.pasteFromMenu() }
     }
     let root = ContentView(model: model, shortcutAvailable: shortcut?.register() == true) {
       [weak self] floating in
       self?.window.level = floating ? .floating : .normal
     }
-    window.contentView = NSHostingView(rootView: root)
+    let content = NSHostingView(rootView: root)
+    content.sizingOptions = []
+    window.contentView = content
     window.setFrameAutosaveName("BookBrainWindow")
     if !window.setFrameUsingName("BookBrainWindow") { window.center() }
+    if let screen = window.screen, window.frame.height > screen.visibleFrame.height {
+      var frame = window.frame
+      frame.size.height = min(830, screen.visibleFrame.height)
+      window.setFrame(window.constrainFrameRect(frame, to: screen), display: false)
+    }
     makeMenu()
     showWindow()
     Task { await model.connect() }
@@ -102,8 +109,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
   }
 
   @objc private func pasteFromMenu() {
-    showWindow()
-    model.pasteExcerpt()
+    Task {
+      guard !model.isImporting else { return }
+      await model.pasteExcerpt()
+      showWindow()
+    }
+  }
+
+  @objc private func applicationActivated(_ notification: Notification) {
+    let application =
+      notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+    if application?.bundleIdentifier == "com.amazon.Lassen" { model.clipboard.beginReading() }
   }
 
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool
