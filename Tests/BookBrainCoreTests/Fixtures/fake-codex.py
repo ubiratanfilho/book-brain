@@ -27,11 +27,12 @@ for line in sys.stdin:
         result = {"userAgent": "fake-codex"}
     elif method == "account/read":
         result = {"account": {"type": "chatgpt"}, "requiresOpenaiAuth": True}
-    elif method == "model/list":
-        result = {"data": [{"model": "test-model", "isDefault": True}]}
     elif method == "config/read":
         result = {"config": {"mcp_servers": {"private_server": {"enabled": True}}}}
     elif method == "thread/start":
+        assert params["model"] == "gpt-6.1-terra"
+        assert params["config"]["model_reasoning_effort"] == "xhigh"
+        assert params["serviceTier"] == "priority"
         assert params["ephemeral"] is True
         assert params["approvalPolicy"] == "never"
         assert params["permissions"] == "book-brain"

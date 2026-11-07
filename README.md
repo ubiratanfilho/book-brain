@@ -52,13 +52,13 @@ Não acessa o livro inteiro, não modifica o Kindle e não importa arquivos prot
 
 ## Integração com o Codex
 
-Swift/Foundation inicia um processo `codex app-server` via stdin/stdout. O aplicativo usa `initialize`, `account/read`, `model/list`, `config/read`, `thread/start` e `turn/start`, recebendo eventos JSONL. Não usa portas de rede locais e não automatiza a interface do Codex.
+Swift/Foundation inicia um processo `codex app-server` via stdin/stdout. O aplicativo usa `initialize`, `account/read`, `config/read`, `thread/start` e `turn/start`, recebendo eventos JSONL. Não usa portas de rede locais e não automatiza a interface do Codex.
 
 Cada pergunta cria uma sessão efêmera com o contexto delimitado pelo app; a sessão é descarregada ao concluir. O histórico persistente é o arquivo local do Book Brain. Sessões efêmeras não alteram as políticas de retenção do provedor.
 
 Os overrides valem somente para o processo filho. O app desabilita shell, execução de código, plugins, conectores, navegador, memória e descoberta de skills; desabilita individualmente os servidores MCP herdados. O perfil `book-brain` permite apenas leitura de caminhos mínimos do runtime e de uma pasta temporária vazia, sem acesso de rede para ferramentas. Pedidos de aprovação/ferramentas são recusados, e um evento de execução inesperado encerra a sessão. O processo do Codex ainda precisa acessar sua autenticação e a rede para inferência.
 
-O app usa o modelo padrão retornado pelo Codex, sem fixar um modelo na aplicação. A API de perfis de permissões é experimental: atualizações do Codex podem exigir ajustes. Falhas são exibidas; não há fallback para permissões mais amplas.
+O Book Brain usa **GPT-6.1 Terra** (`gpt-6.1-terra`) com raciocínio **Extra High** (`xhigh`) e modo **Fast** (`priority`) em cada pergunta. A configuração é específica das conversas do aplicativo. A API de perfis de permissões é experimental: atualizações do Codex podem exigir ajustes. Falhas são exibidas; não há fallback para permissões mais amplas.
 
 Referências: [Codex App Server](https://learn.chatgpt.com/docs/app-server), [perfis de permissões](https://learn.chatgpt.com/docs/permissions).
 

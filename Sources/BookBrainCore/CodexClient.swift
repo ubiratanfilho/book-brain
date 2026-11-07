@@ -2,7 +2,7 @@ import Foundation
 
 @MainActor
 public final class CodexClient {
-  public private(set) var model = ""
+  public let model = "gpt-6.1-terra"
   public private(set) var isConnected = false
 
   private let executable: URL
@@ -121,21 +121,12 @@ public final class CodexClient {
         throw BookBrainError.message(
           "Entre no Codex primeiro: execute codex login no Terminal e reconecte.")
       }
-      let models = try await request("model/list", ["includeHidden": false])
-      guard let entries = models["data"] as? [[String: Any]],
-        let selected = entries.first(where: { $0["isDefault"] as? Bool == true }),
-        let name = selected["model"] as? String
-      else {
-        throw BookBrainError.message(
-          "O Codex não informou um modelo padrão. Verifique sua instalação.")
-      }
-      model = name
       // Map overrides merge with the user's config: explicitly disable each inherited MCP.
       let config = try await request("config/read", ["includeLayers": false])
       guard let values = config["config"] as? [String: Any] else {
         throw BookBrainError.message("Não foi possível verificar as configurações do Codex.")
       }
-      threadConfig = [:]
+      threadConfig = ["model_reasoning_effort": "xhigh"]
       if let servers = values["mcp_servers"] as? [String: Any] {
         threadConfig["mcp_servers"] = Dictionary(
           uniqueKeysWithValues: servers.keys.map {
@@ -159,7 +150,7 @@ public final class CodexClient {
     let result = try await request(
       "thread/start",
       [
-        "model": model, "cwd": directory.path, "ephemeral": true,
+        "model": model, "serviceTier": "priority", "cwd": directory.path, "ephemeral": true,
         "approvalPolicy": "never", "permissions": "book-brain",
         "baseInstructions": ReadingPrompt.instructions,
         "developerInstructions": "This is a text-only reading conversation. Do not use any tools.",
