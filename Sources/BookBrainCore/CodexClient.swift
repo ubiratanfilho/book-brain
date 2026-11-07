@@ -21,8 +21,11 @@ public final class CodexClient {
   private var activeThread: String?
   private var activeTurn: String?
   private var earlyEvents: [[String: Any]] = []
+  private var activePDF: BookPDFReader?
+  private var pdfCalls: [Task<Void, Never>] = []
   private var reply: CheckedContinuation<String, Error>?
   private var onUpdate: ((String) -> Void)?
+  private var onLookup: ((String) -> Void)?
   private var accumulator = AnswerAccumulator()
   private var threadConfig: [String: Any] = [:]
   private var workingDirectory: URL?
@@ -48,7 +51,7 @@ public final class CodexClient {
 
   // Process-local overrides; never edit the reader's Codex settings or credentials.
   static let configuration = [
-    "approval_policy=\"never\"", "web_search=\"disabled\"",
+    "approval_policy=\"never\"", "web_search=\"live\"",
     "permissions.book-brain.filesystem={\":minimal\"=\"read\",\":workspace_roots\"=\"read\"}",
     "permissions.book-brain.network.enabled=false",
     "project_doc_max_bytes=0", "skills.include_instructions=false",
@@ -56,7 +59,9 @@ public final class CodexClient {
     "memories.dedicated_tools=false",
     "tools.update_plan.enabled=false", "tools.experimental_request_user_input.enabled=false",
     "features.shell_tool=false", "features.unified_exec=false",
-    "features.code_mode=false", "features.code_mode_host=false", "features.js_repl=false",
+    #"features.code_mode={enabled=false,direct_only_tool_namespaces=["book_pdf","web"]}"#,
+    "features.standalone_web_search=true", "features.code_mode_host=false",
+    "features.js_repl=false",
     "features.apply_patch_freeform=false", "features.apps=false", "features.plugins=false",
     "features.connectors=false", "features.browser_use=false", "features.computer_use=false",
     "features.multi_agent=false", "features.collab=false",
@@ -116,7 +121,7 @@ public final class CodexClient {
       _ = try await request(
         "initialize",
         [
-          "clientInfo": ["name": "book_brain", "title": "Book Brain", "version": "0.3.0"],
+          "clientInfo": ["name": "book_brain", "title": "Book Brain", "version": "0.4.0"],
           "capabilities": ["experimentalApi": true],
         ])
       try write(["method": "initialized"])
@@ -144,17 +149,28 @@ public final class CodexClient {
     }
   }
 
-  private func loadThread(_ savedID: String?, in directory: URL) async throws -> String {
+  private func loadThread(_ savedID: String?, in directory: URL, withPDF: Bool) async throws
+    -> String
+  {
     var params: [String: Any] = [
       "model": model, "serviceTier": "priority", "cwd": directory.path,
       "approvalPolicy": "never", "permissions": "book-brain",
       "baseInstructions": ReadingPrompt.instructions,
-      "developerInstructions": "This is a text-only reading conversation. Do not use any tools.",
+      "developerInstructions":
+        "Use only hosted web search and the attached-book PDF tools as directed by the reading instructions.",
       "config": threadConfig,
     ]
     if let savedID {
       params["threadId"] = savedID
       params["excludeTurns"] = true
+    } else if withPDF {
+      params["dynamicTools"] = [
+        [
+          "type": "namespace", "name": BookPDFReader.namespace,
+          "description": "Consult the PDF attached to the selected book.",
+          "tools": BookPDFReader.specs,
+        ]
+      ]
     }
     let result = try await request(savedID == nil ? "thread/start" : "thread/resume", params)
     guard let profile = result["activePermissionProfile"] as? [String: Any],
@@ -174,7 +190,11 @@ public final class CodexClient {
     return id
   }
 
-  public func ask(prompt: String, threadID: String?, onUpdate: @escaping (String) -> Void)
+  public func ask(
+    prompt: String, threadID: String?, pdf: BookPDFReader? = nil,
+    onLookup: ((String) -> Void)? = nil,
+    onUpdate: @escaping (String) -> Void
+  )
     async throws -> (text: String, threadID: String)
   {
     guard isConnected, let directory = workingDirectory else {
@@ -183,7 +203,9 @@ public final class CodexClient {
     guard !asking else { throw BookBrainError.message("Aguarde a resposta atual.") }
     asking = true
     defer { asking = false }
-    let id = try await loadThread(threadID, in: directory)
+    let id = try await loadThread(threadID, in: directory, withPDF: pdf != nil)
+    activePDF = pdf
+    self.onLookup = onLookup
     let result: Result<String, Error>
     do {
       result = .success(try await runTurn(in: id, prompt: prompt, onUpdate: onUpdate))
@@ -263,13 +285,57 @@ public final class CodexClient {
 
   private func receive(_ message: [String: Any]) {
     if message["method"] != nil, let id = message["id"] {
-      // This app exposes no tools, approvals, or interactive server requests.
+      if message["method"] as? String == "item/tool/call",
+        let params = message["params"] as? [String: Any], let reader = activePDF,
+        let thread = activeThread, params["threadId"] as? String == thread,
+        let turn = params["turnId"] as? String, let name = params["tool"] as? String,
+        [BookPDFReader.search, BookPDFReader.read].contains(name),
+        params["namespace"] as? String == BookPDFReader.namespace,
+        let args = params["arguments"] as? [String: Any]
+      {
+        guard activeTurn != nil else {
+          earlyEvents.append(message)
+          return
+        }
+        if activeTurn == turn {
+          if pdfCalls.count >= BookPDFReader.callLimit {
+            sendPDFResult(
+              id: id,
+              items: [
+                [
+                  "type": "inputText",
+                  "text":
+                    "PDF lookup limit for this question reached. Answer from the pages already consulted.",
+                ]
+              ], success: false)
+          } else {
+            onLookup?("Consultando o PDF…")
+            pdfCalls.append(
+              Task {
+                let items: [[String: String]]
+                let success: Bool
+                do {
+                  items = try await reader.contents(for: name, arguments: args)
+                  success = true
+                } catch {
+                  items = [["type": "inputText", "text": error.localizedDescription]]
+                  success = false
+                }
+                guard !Task.isCancelled, self.activeThread == thread, self.activeTurn == turn else {
+                  return
+                }
+                self.sendPDFResult(id: id, items: items, success: success)
+              })
+          }
+          return
+        }
+      }
       do {
         try write([
           "id": id,
           "error": [
             "code": -32601,
-            "message": "Book Brain does not allow tool execution or approval requests.",
+            "message": "This request is not permitted by Book Brain.",
           ],
         ])
       } catch { stop(error: error) }
@@ -312,13 +378,22 @@ public final class CodexClient {
         onUpdate?(accumulator.text)
       }
     case "item/started", "item/completed":
+      if method == "item/started",
+        (params["item"] as? [String: Any])?["type"] as? String == "webSearch"
+      {
+        onLookup?("Pesquisando na web…")
+      }
       if method == "item/started", let item = params["item"] as? [String: Any],
         let type = item["type"] as? String,
-        !["userMessage", "agentMessage", "reasoning", "contextCompaction"].contains(type)
+        !["userMessage", "agentMessage", "reasoning", "contextCompaction", "webSearch"].contains(
+          type),
+        !(type == "dynamicToolCall" && activePDF != nil
+          && [BookPDFReader.search, BookPDFReader.read].contains(item["tool"] as? String ?? "")
+          && (item["namespace"] as? String == BookPDFReader.namespace))
       {
         stop(
           error: BookBrainError.message(
-            "O Codex tentou usar uma ferramenta. A sessão foi encerrada; este app só permite conversar sobre texto."
+            "O Codex tentou usar uma ferramenta fora das consultas permitidas. A sessão foi encerrada."
           ))
         return
       }
@@ -350,13 +425,23 @@ public final class CodexClient {
     }
   }
 
+  private func sendPDFResult(id: Any, items: [[String: String]], success: Bool) {
+    do { try write(["id": id, "result": ["contentItems": items, "success": success]]) } catch {
+      stop(error: error)
+    }
+  }
+
   private func finish(_ result: Result<String, Error>) {
+    for call in pdfCalls { call.cancel() }
+    pdfCalls.removeAll()
+    activePDF = nil
     answerDeadline?.cancel()
     answerDeadline = nil
     activeThread = nil
     activeTurn = nil
     earlyEvents.removeAll()
     onUpdate = nil
+    onLookup = nil
     let continuation = reply
     reply = nil
     continuation?.resume(with: result)

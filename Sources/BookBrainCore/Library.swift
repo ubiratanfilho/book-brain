@@ -46,10 +46,15 @@ public struct ReadingChat: Codable, Identifiable, Equatable {
 public struct Book: Codable, Identifiable, Equatable {
   public var id = UUID()
   public var title: String
+  public var author: String
+  public var pdf: BookPDF?
   public var currentChat = ReadingChat()
   public private(set) var savedChats: [ReadingChat] = []
 
-  public init(title: String) { self.title = title }
+  public init(title: String, author: String) {
+    self.title = title
+    self.author = author
+  }
 
   public mutating func newChat() {
     guard !currentChat.isBlank else { return }
@@ -81,13 +86,17 @@ public struct Book: Codable, Identifiable, Equatable {
     }
   }
 
-  private enum CodingKeys: String, CodingKey { case id, title, currentChat, savedChats }
+  private enum CodingKeys: String, CodingKey {
+    case id, title, author, pdf, currentChat, savedChats
+  }
   private enum LegacyKeys: String, CodingKey { case location, excerpt, question, exchanges }
 
   public init(from decoder: Decoder) throws {
     let fields = try decoder.container(keyedBy: CodingKeys.self)
     id = try fields.decode(UUID.self, forKey: .id)
     title = try fields.decode(String.self, forKey: .title)
+    author = try fields.decodeIfPresent(String.self, forKey: .author) ?? ""
+    pdf = try fields.decodeIfPresent(BookPDF.self, forKey: .pdf)
     if fields.contains(.currentChat) || fields.contains(.savedChats) {
       currentChat = try fields.decode(ReadingChat.self, forKey: .currentChat)
       savedChats = try fields.decode([ReadingChat].self, forKey: .savedChats)

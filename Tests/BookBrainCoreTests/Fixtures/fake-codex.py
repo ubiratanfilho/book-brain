@@ -97,6 +97,29 @@ for line in sys.stdin:
         if question == "MALFORMED":
             os.write(sys.stdout.fileno(), b"not-json\n")
             continue
+        if question == "PDF_SCOPE":
+            pdf_call = {
+                "threadId": thread_id,
+                "turnId": turn_id,
+                "namespace": "book_pdf",
+                "tool": "read_book_page",
+                "arguments": {"page": 1},
+            }
+            for override in (
+                {"threadId": "another-book"},
+                {"turnId": "finished-turn"},
+                {"namespace": "unknown"},
+                {"tool": "unknown"},
+            ):
+                emit(
+                    {
+                        "id": "pdf-check",
+                        "method": "item/tool/call",
+                        "params": {**pdf_call, **override},
+                    }
+                )
+                assert json.loads(next(sys.stdin))["error"]["code"] == -32601
+            event("item/started", item={"id": "web", "type": "webSearch"})
         if question == "SERVER_REQUEST":
             emit(
                 {"id": "approval-1", "method": "item/commandExecution/requestApproval"}

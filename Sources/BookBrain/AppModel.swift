@@ -14,6 +14,7 @@ final class AppModel: ObservableObject {
   @Published var isConnected = false
   @Published var isBusy = false
   @Published var streamingAnswer = ""
+  @Published var answerStatus = ""
   @Published var pendingQuestion = ""
   @Published var modelName = ""
   @Published var showNewBook = false
@@ -60,15 +61,51 @@ final class AppModel: ObservableObject {
     )
   }
 
-  func createBook(title: String) {
-    guard isEditable else { return }
+  func saveBook(id: UUID?, title: String, author: String, pdfURL: URL?) async throws {
+    guard isEditable else { throw BookBrainError.message("Aguarde a operação atual.") }
     let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !name.isEmpty else { return }
-    let book = Book(title: String(name.prefix(200)))
-    library.books.append(book)
+    let writer = author.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !name.isEmpty, !writer.isEmpty else {
+      throw BookBrainError.message("Preencha o título e o nome do autor.")
+    }
+    guard name.count <= 200, writer.count <= 200 else {
+      throw BookBrainError.message("Use até 200 caracteres em cada campo.")
+    }
+    isImporting = true
+    defer { isImporting = false }
+    var next = library
+    if let id {
+      guard let index = next.books.firstIndex(where: { $0.id == id }), pdfURL == nil else {
+        throw BookBrainError.message("Não foi possível alterar este livro.")
+      }
+      next.books[index].title = name
+      next.books[index].author = writer
+      try commitLibrary(next)
+    } else {
+      var book = Book(title: name, author: writer)
+      if let pdfURL {
+        let bookID = book.id
+        let destination = store
+        book.pdf = try await Task.detached(priority: .userInitiated) {
+          try destination.importPDF(pdfURL, for: bookID)
+        }.value
+      }
+      next.books.append(book)
+      next.selectedBookID = book.id
+      do { try commitLibrary(next) } catch {
+        if book.pdf != nil { try FileManager.default.removeItem(at: store.pdfURL(for: book.id)) }
+        throw error
+      }
+    }
     captureIssue = nil
-    library.selectedBookID = book.id
-    saveNow()
+    notice = nil
+  }
+
+  private func commitLibrary(_ next: Library) throws {
+    try store.save(next)
+    library = next
+    saveTask?.cancel()
+    storageError = nil
   }
 
   func selectBook(_ id: UUID) {
@@ -79,11 +116,18 @@ final class AppModel: ObservableObject {
   }
 
   func deleteSelectedBook() {
-    guard isEditable, let id = library.selectedBookID else { return }
-    library.books.removeAll { $0.id == id }
-    captureIssue = nil
-    library.selectedBookID = library.books.first?.id
-    saveNow()
+    guard isEditable, let book = selectedBook else { return }
+    var next = library
+    next.books.removeAll { $0.id == book.id }
+    next.selectedBookID = next.books.first?.id
+    do {
+      try commitLibrary(next)
+      captureIssue = nil
+      let file = store.pdfURL(for: book.id)
+      if book.pdf != nil, FileManager.default.fileExists(atPath: file.path) {
+        try FileManager.default.removeItem(at: file)
+      }
+    } catch { notice = error.localizedDescription }
   }
 
   func changeChat(_ edit: (inout Book) -> Void) {
@@ -193,6 +237,7 @@ final class AppModel: ObservableObject {
       return
     }
     isBusy = true
+    answerStatus = "Preparando resposta…"
     pendingQuestion = snapshot.currentChat.question
     streamingAnswer = ""
     notice = nil
@@ -204,10 +249,11 @@ final class AppModel: ObservableObject {
       isConnected = client.isConnected
     }
     do {
-      let answer = try await client.ask(prompt: prompt, threadID: snapshot.currentChat.threadID) {
-        [weak self] text in
-        self?.streamingAnswer = text
-      }
+      let reader = snapshot.pdf.map { _ in BookPDFReader(file: store.pdfURL(for: snapshot.id)) }
+      let answer = try await client.ask(
+        prompt: prompt, threadID: snapshot.currentChat.threadID, pdf: reader,
+        onLookup: { [weak self] in self?.answerStatus = $0 },
+        onUpdate: { [weak self] text in self?.streamingAnswer = text })
       guard let index = library.books.firstIndex(where: { $0.id == snapshot.id }),
         library.books[index].currentChat.id == snapshot.currentChat.id
       else { return }

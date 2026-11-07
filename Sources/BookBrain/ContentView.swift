@@ -14,7 +14,7 @@ struct ContentView: View {
   let shortcutAvailable: Bool
   let setFloating: (Bool) -> Void
   let setCompact: (Bool) -> Void
-  @State private var newTitle = ""
+  @State private var editingBook: Book?
   @State private var confirmDelete = false
   @State private var editingCompactExcerpt = false
   @State private var showChats = false
@@ -62,7 +62,12 @@ struct ContentView: View {
         }
       }
       .sheet(isPresented: $model.showNewBook) {
-        newBookSheet.frame(width: min(400, geometry.size.width))
+        BookDetailsForm(model: model).frame(
+          width: min(420, geometry.size.width), height: min(350, geometry.size.height))
+      }
+      .sheet(item: $editingBook) { book in
+        BookDetailsForm(model: model, book: book).frame(
+          width: min(420, geometry.size.width), height: min(350, geometry.size.height))
       }
       .sheet(isPresented: $showChats) {
         ChatHistoryView(model: model)
@@ -79,7 +84,7 @@ struct ContentView: View {
       Button("Cancelar", role: .cancel) {}
       Button("Excluir", role: .destructive) { model.deleteSelectedBook() }
     } message: {
-      Text("O histórico local deste livro será apagado. Essa ação não altera nada no Kindle.")
+      Text("O histórico e a cópia do PDF deste livro serão removidos da biblioteca do Book Brain.")
     }
     .onChange(of: model.focusQuestion) { _, _ in questionFocused = true }
   }
@@ -162,13 +167,15 @@ struct ContentView: View {
         Spacer()
         Menu {
           ForEach(model.library.books) { item in
-            Button(item.title) { model.selectBook(item.id) }
+            Button(item.author.isEmpty ? item.title : "\(item.title) · \(item.author)") {
+              model.selectBook(item.id)
+            }
           }
           Divider()
           Button("Adicionar livro…") {
-            newTitle = ""
             model.showNewBook = true
           }
+          Button("Editar título e autor…") { editingBook = book }
           Button("Excluir livro atual…", role: .destructive) { confirmDelete = true }
         } label: {
           Label("Livros", systemImage: "books.vertical")
@@ -179,6 +186,13 @@ struct ContentView: View {
       if !compact {
         Text(book.title).font(.system(size: 26, weight: .medium, design: .serif))
           .lineLimit(2).textSelection(.enabled)
+      }
+      if !book.author.isEmpty {
+        Text(book.author).font(.system(size: 12)).foregroundStyle(Palette.muted).lineLimit(2)
+      }
+      if let pdf = book.pdf {
+        Label("PDF · \(pdf.name) · \(pdf.pageCount) pág.", systemImage: "doc.text")
+          .font(.caption).foregroundStyle(Palette.muted).lineLimit(1).help(pdf.name)
       }
       TextField("Capítulo ou página · opcional", text: model.field(\.location))
         .textFieldStyle(.plain).font(.system(size: 12)).foregroundStyle(Palette.muted)
@@ -302,7 +316,7 @@ struct ContentView: View {
             if model.streamingAnswer.isEmpty {
               HStack(spacing: 10) {
                 ProgressView().controlSize(.small)
-                Text("Pensando sobre o trecho…").font(.system(size: 12)).foregroundStyle(
+                Text(model.answerStatus).font(.system(size: 12)).foregroundStyle(
                   Palette.muted)
               }
             } else {
@@ -359,9 +373,9 @@ struct ContentView: View {
       .overlay { RoundedRectangle(cornerRadius: 12).stroke(Palette.line, lineWidth: 1) }
       HStack(alignment: .top) {
         Text(
-          compact
-            ? "Trecho e histórico no Codex. Memórias ativadas."
-            : "A pergunta e o trecho vão para esta conversa no Codex. Memórias ativadas."
+          book.pdf == nil
+            ? "Pesquisa na web disponível. Memórias ativadas."
+            : "Consulta ao PDF e pesquisa na web disponíveis. Memórias ativadas."
         )
         .fixedSize(horizontal: false, vertical: true)
         Spacer()
@@ -388,7 +402,6 @@ struct ContentView: View {
       .font(.system(size: 15)).foregroundStyle(Palette.muted).lineSpacing(5)
       .fixedSize(horizontal: false, vertical: true)
       Button {
-        newTitle = ""
         model.showNewBook = true
       } label: {
         Label("Adicionar meu primeiro livro", systemImage: "plus")
@@ -406,32 +419,6 @@ struct ContentView: View {
       )
       .font(.system(size: 11)).foregroundStyle(Palette.muted).lineSpacing(3)
     }.padding(32)
-  }
-
-  private var newBookSheet: some View {
-    VStack(alignment: .leading, spacing: 20) {
-      Text("O que você está lendo?").font(.system(size: 25, design: .serif))
-      Text("O nome organiza seus trechos e conversas. Não é preciso importar o livro.")
-        .font(.system(size: 13)).foregroundStyle(.secondary)
-      TextField("Título do livro", text: $newTitle)
-        .textFieldStyle(.roundedBorder).controlSize(.large)
-        .accessibilityLabel("Título do livro")
-        .onSubmit { addBook() }
-      HStack {
-        Spacer()
-        Button("Cancelar") { model.showNewBook = false }.keyboardShortcut(.cancelAction)
-        Button("Adicionar") { addBook() }
-          .buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
-          .disabled(newTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-      }
-    }.padding(22).background(Palette.paper)
-  }
-
-  private func addBook() {
-    guard !newTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-    model.createBook(title: newTitle)
-    model.showNewBook = false
-    newTitle = ""
   }
 
   private func suggestion(_ text: String, icon: String) -> some View {
