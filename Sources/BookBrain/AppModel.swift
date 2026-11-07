@@ -88,11 +88,20 @@ final class AppModel: ObservableObject {
 
   func refreshCopyAccess() { canCopyFromKindle = CGPreflightPostEventAccess() }
 
+  private var copyAccessInstructions: String {
+    let settingsPath: String
+    if #available(macOS 27, *) {
+      settingsPath = "System Settings → Privacy & Security → Device Control and Data Access"
+    } else {
+      settingsPath = "Ajustes do Sistema → Privacidade e Segurança → Acessibilidade"
+    }
+    return "Ative o Book Brain em \(settingsPath). Depois, volte ao Kindle e use ⌘⇧B."
+  }
+
   func requestCopyAccess() {
     canCopyFromKindle = CGRequestPostEventAccess()
     if !canCopyFromKindle {
-      notice =
-        "Ative Book Brain em Ajustes do Sistema → Privacidade e Segurança → Acessibilidade. Depois, volte ao Kindle e use ⌘⇧B."
+      notice = copyAccessInstructions
     }
   }
 
@@ -119,9 +128,7 @@ final class AppModel: ObservableObject {
         } else if clipboard.hasNewCopy {
           excerpt = try await clipboard.readNewExcerpt()
         } else {
-          throw BookBrainError.message(
-            "Para trazer a seleção direto do Kindle com ⌘⇧B, autorize o Book Brain em Acessibilidade."
-          )
+          throw BookBrainError.message(copyAccessInstructions)
         }
       } else {
         excerpt = try await clipboard.readNewExcerpt()
