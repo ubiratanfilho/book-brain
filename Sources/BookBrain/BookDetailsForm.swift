@@ -21,11 +21,11 @@ struct BookDetailsForm: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
-      Text(book == nil ? "Adicionar livro" : "Editar livro").font(.system(size: 23, design: .serif))
+      Text(book == nil ? "Add book" : "Edit book").font(.system(size: 23, design: .serif))
       ScrollView {
         VStack(alignment: .leading, spacing: 10) {
-          LabeledContent("Título") { TextField("Título do livro", text: $title) }
-          LabeledContent("Autor") { TextField("Nome do autor", text: $author) }
+          LabeledContent("Title") { TextField("Book title", text: $title) }
+          LabeledContent("Author") { TextField("Author's name", text: $author) }
           if book == nil {
             if let pdfURL {
               HStack {
@@ -36,17 +36,17 @@ struct BookDetailsForm: View {
                 } label: {
                   Image(systemName: "xmark")
                 }
-                .accessibilityLabel("Remover PDF da seleção")
+                .accessibilityLabel("Remove selected PDF")
               }
             } else {
               Button {
                 choosingPDF = true
               } label: {
-                Label("Anexar PDF (opcional)…", systemImage: "paperclip")
+                Label("Attach PDF (optional)…", systemImage: "paperclip")
               }
             }
             Text(
-              "O PDF fica salvo neste Mac. O Codex pode consultar páginas para responder e citar a fonte."
+              "The PDF is saved on this Mac. Codex can read and cite individual pages."
             )
             .font(.caption).foregroundStyle(.secondary)
           }
@@ -56,8 +56,8 @@ struct BookDetailsForm: View {
       HStack {
         if model.isImporting { ProgressView().controlSize(.small) }
         Spacer()
-        Button("Cancelar") { dismiss() }.keyboardShortcut(.cancelAction).disabled(model.isImporting)
-        Button(book == nil ? "Adicionar" : "Salvar") {
+        Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction).disabled(model.isImporting)
+        Button(book == nil ? "Add" : "Save") {
           Task {
             do {
               try await model.saveBook(id: book?.id, title: title, author: author, pdfURL: pdfURL)

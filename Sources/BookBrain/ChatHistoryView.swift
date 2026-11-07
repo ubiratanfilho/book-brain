@@ -14,11 +14,11 @@ struct ChatHistoryView: View {
       VStack(alignment: .leading, spacing: 10) {
         HStack {
           VStack(alignment: .leading, spacing: 3) {
-            Text("Conversas").font(.title2)
+            Text("Chats").font(.title2)
             Text(book.title).font(.caption).foregroundStyle(.secondary).lineLimit(1)
           }
           Spacer()
-          Button("Fechar") { dismiss() }.keyboardShortcut(.cancelAction)
+          Button("Close") { dismiss() }.keyboardShortcut(.cancelAction)
         }
         Divider()
         ScrollView {
@@ -26,14 +26,14 @@ struct ChatHistoryView: View {
             ForEach([book.currentChat] + book.savedChats) { chat in
               if editingID == chat.id {
                 HStack {
-                  TextField("Nome da conversa", text: $name).onSubmit { saveName(chat) }
-                  Button("Salvar") { saveName(chat) }
+                  TextField("Chat name", text: $name).onSubmit { saveName(chat) }
+                  Button("Save") { saveName(chat) }
                   Button {
                     editingID = nil
                   } label: {
                     Image(systemName: "xmark")
                   }
-                  .accessibilityLabel("Cancelar edição")
+                  .accessibilityLabel("Cancel editing")
                 }.padding(.vertical, 6)
               } else {
                 HStack {
@@ -50,21 +50,21 @@ struct ChatHistoryView: View {
                         Text("·")
                         Text(
                           chat.exchanges.isEmpty
-                            ? "Rascunho"
-                            : "\(chat.exchanges.count) \(chat.exchanges.count == 1 ? "pergunta" : "perguntas")"
+                            ? "Draft"
+                            : "\(chat.exchanges.count) \(chat.exchanges.count == 1 ? "question" : "questions")"
                         )
                       }.font(.caption).foregroundStyle(.secondary)
                     }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
                   }.buttonStyle(.plain)
                   if chat.id == book.currentChat.id {
-                    Image(systemName: "checkmark").accessibilityLabel("Conversa atual")
+                    Image(systemName: "checkmark").accessibilityLabel("Current chat")
                   }
                   Menu {
-                    Button("Renomear…") {
+                    Button("Rename…") {
                       name = chat.title
                       editingID = chat.id
                     }
-                    Button("Excluir…", role: .destructive) {
+                    Button("Delete…", role: .destructive) {
                       deletion = chat
                       confirmDeletion = true
                     }
@@ -72,7 +72,7 @@ struct ChatHistoryView: View {
                     Image(systemName: "ellipsis.circle")
                   }
                   .menuIndicator(.hidden).menuStyle(.borderlessButton).fixedSize()
-                  .accessibilityLabel("Opções de \(chat.title)")
+                  .accessibilityLabel("Options for \(chat.title)")
                 }
                 .padding(8)
                 .background(
@@ -84,13 +84,13 @@ struct ChatHistoryView: View {
         }
       }.padding(14)
         .alert(
-          "Excluir conversa do Book Brain?", isPresented: $confirmDeletion, presenting: deletion
+          "Delete this chat from Book Brain?", isPresented: $confirmDeletion, presenting: deletion
         ) { chat in
-          Button("Cancelar", role: .cancel) {}
-          Button("Excluir", role: .destructive) { model.changeChat { $0.deleteChat(chat.id) } }
+          Button("Cancel", role: .cancel) {}
+          Button("Delete", role: .destructive) { model.changeChat { $0.deleteChat(chat.id) } }
         } message: { chat in
           Text(
-            "“\(chat.title)” será removida da biblioteca deste Mac. O Codex mantém seu próprio histórico e suas memórias."
+            "“\(chat.title)” will be removed from this Mac's library. Codex keeps its own history and memories."
           )
         }
     }

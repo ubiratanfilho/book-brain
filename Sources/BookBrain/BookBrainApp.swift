@@ -30,7 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     window.title = "Book Brain"
     window.titlebarAppearsTransparent = true
     window.titleVisibility = .hidden
-    window.backgroundColor = NSColor(calibratedRed: 0.97, green: 0.96, blue: 0.94, alpha: 1)
+    window.backgroundColor = NSColor(Palette.paper)
     window.minSize = NSSize(width: 300, height: 280)
     window.level = .floating
     window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
@@ -70,21 +70,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     let applicationItem = NSMenuItem()
     let applicationMenu = NSMenu()
     applicationMenu.addItem(
-      withTitle: "Sobre o Book Brain",
+      withTitle: "About Book Brain",
       action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
     applicationMenu.addItem(.separator())
     applicationMenu.addItem(
-      withTitle: "Sair do Book Brain", action: #selector(NSApplication.terminate(_:)),
+      withTitle: "Quit Book Brain", action: #selector(NSApplication.terminate(_:)),
       keyEquivalent: "q")
     applicationItem.submenu = applicationMenu
     mainMenu.addItem(applicationItem)
     let editItem = NSMenuItem()
-    editItem.title = "Editar"
-    let editMenu = NSMenu(title: "Editar")
+    editItem.title = "Edit"
+    let editMenu = NSMenu(title: "Edit")
     for (title, action, key) in [
-      ("Desfazer", "undo:", "z"), ("Recortar", "cut:", "x"),
-      ("Copiar", "copy:", "c"), ("Colar", "paste:", "v"),
-      ("Selecionar tudo", "selectAll:", "a"),
+      ("Undo", "undo:", "z"), ("Cut", "cut:", "x"),
+      ("Copy", "copy:", "c"), ("Paste", "paste:", "v"),
+      ("Select All", "selectAll:", "a"),
     ] {
       editMenu.addItem(withTitle: title, action: Selector(action), keyEquivalent: key)
     }
@@ -97,14 +97,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
       systemSymbolName: "book.closed", accessibilityDescription: "Book Brain")
     let menu = NSMenu()
     let open = menu.addItem(
-      withTitle: "Abrir Book Brain", action: #selector(showWindow), keyEquivalent: "")
+      withTitle: "Open Book Brain", action: #selector(showWindow), keyEquivalent: "")
     open.target = self
     let paste = menu.addItem(
-      withTitle: "Colar trecho copiado", action: #selector(pasteFromMenu), keyEquivalent: "")
+      withTitle: "Paste copied passage", action: #selector(pasteFromMenu), keyEquivalent: "")
     paste.target = self
     menu.addItem(.separator())
     menu.addItem(
-      withTitle: "Sair", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+      withTitle: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
     statusItem.menu = menu
   }
 

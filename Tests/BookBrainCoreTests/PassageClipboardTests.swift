@@ -14,7 +14,7 @@ final class PassageClipboardTests: XCTestCase {
     do {
       _ = try await capture.readNewExcerpt()
       XCTFail("Selecting text without copying must not import the previous clipboard.")
-    } catch { XCTAssertTrue(error.localizedDescription.contains("nova cópia")) }
+    } catch { XCTAssertTrue(error.localizedDescription.contains("fresh copy")) }
 
     board.clearContents()
     board.setString("Second passage", forType: .string)
@@ -23,7 +23,7 @@ final class PassageClipboardTests: XCTestCase {
     do {
       _ = try await capture.readNewExcerpt()
       XCTFail("The same clipboard revision must not be imported twice.")
-    } catch { XCTAssertTrue(error.localizedDescription.contains("nova cópia")) }
+    } catch { XCTAssertTrue(error.localizedDescription.contains("fresh copy")) }
     board.clearContents()
     board.setString("Second passage", forType: .string)
     let recopied = try await capture.readNewExcerpt()

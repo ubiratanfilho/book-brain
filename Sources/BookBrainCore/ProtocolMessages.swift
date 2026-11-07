@@ -7,7 +7,7 @@ struct JSONLines {
   mutating func append(_ data: Data) throws -> [[String: Any]] {
     buffer.append(data)
     guard buffer.count <= 8 * 1_024 * 1_024 else {
-      throw BookBrainError.message("O Codex enviou uma resposta maior que o esperado.")
+      throw BookBrainError.message("Codex sent a larger reply than expected.")
     }
     var messages: [[String: Any]] = []
     while let end = buffer.firstIndex(of: 10) {
@@ -15,7 +15,7 @@ struct JSONLines {
       buffer.removeSubrange(...end)
       if line.isEmpty { continue }
       guard let object = try JSONSerialization.jsonObject(with: line) as? [String: Any] else {
-        throw BookBrainError.message("Resposta inválida do Codex.")
+        throw BookBrainError.message("Codex returned an invalid reply.")
       }
       messages.append(object)
     }

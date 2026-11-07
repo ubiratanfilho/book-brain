@@ -7,8 +7,8 @@ public enum ReadingPrompt {
   public static let exchangeLimit = 6
 
   public static let instructions = """
-    You are Book Brain, a reading companion. Answer in Brazilian Portuguese unless the
-    reader asks for another language. Start with a concrete example or intuition when useful.
+    You are Book Brain, a reading companion. Answer in the language of current_question unless the
+    reader explicitly requests another language. Start with a concrete example or intuition when useful.
     Explain clearly and directly. Use Markdown with short paragraphs.
 
     Identify the work using book_title and book_author. If the author is missing and
@@ -39,13 +39,13 @@ public enum ReadingPrompt {
 
   public static func make(book: Book) throws -> String {
     guard !book.currentChat.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-      throw BookBrainError.message("Escreva uma pergunta antes de enviar.")
+      throw BookBrainError.message("Enter a question before sending.")
     }
     guard book.currentChat.excerpt.count <= excerptLimit else {
-      throw BookBrainError.message("Selecione um trecho de até 12.000 caracteres.")
+      throw BookBrainError.message("Select a passage of up to 12,000 characters.")
     }
     guard book.currentChat.question.count <= questionLimit else {
-      throw BookBrainError.message("Use uma pergunta de até 4.000 caracteres.")
+      throw BookBrainError.message("Use up to 4,000 characters in your question.")
     }
 
     var history: [[String: String]] = []

@@ -41,7 +41,7 @@ final class AppModel: ObservableObject {
       canSave = true
     } catch {
       storageError =
-        "Não foi possível abrir seu histórico. O arquivo foi preservado. \(error.localizedDescription)"
+        "Couldn't open your chat history. The original file is safe. \(error.localizedDescription)"
     }
   }
 
@@ -62,21 +62,23 @@ final class AppModel: ObservableObject {
   }
 
   func saveBook(id: UUID?, title: String, author: String, pdfURL: URL?) async throws {
-    guard isEditable else { throw BookBrainError.message("Aguarde a operação atual.") }
+    guard isEditable else {
+      throw BookBrainError.message("Wait for the current operation to finish.")
+    }
     let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
     let writer = author.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !name.isEmpty, !writer.isEmpty else {
-      throw BookBrainError.message("Preencha o título e o nome do autor.")
+      throw BookBrainError.message("Enter both the title and the author's name.")
     }
     guard name.count <= 200, writer.count <= 200 else {
-      throw BookBrainError.message("Use até 200 caracteres em cada campo.")
+      throw BookBrainError.message("Use up to 200 characters in each field.")
     }
     isImporting = true
     defer { isImporting = false }
     var next = library
     if let id {
       guard let index = next.books.firstIndex(where: { $0.id == id }), pdfURL == nil else {
-        throw BookBrainError.message("Não foi possível alterar este livro.")
+        throw BookBrainError.message("Couldn't update this book.")
       }
       next.books[index].title = name
       next.books[index].author = writer
@@ -147,9 +149,9 @@ final class AppModel: ObservableObject {
     if #available(macOS 27, *) {
       settingsPath = "System Settings → Privacy & Security → Device Control and Data Access"
     } else {
-      settingsPath = "Ajustes do Sistema → Privacidade e Segurança → Acessibilidade"
+      settingsPath = "System Settings → Privacy & Security → Accessibility"
     }
-    return "Ative o Book Brain em \(settingsPath). Depois, volte ao Kindle e use ⌘⇧B."
+    return "Enable Book Brain in \(settingsPath), then return to Kindle and press ⌘⇧B."
   }
 
   func requestCopyAccess() {
@@ -162,12 +164,12 @@ final class AppModel: ObservableObject {
   func pasteExcerpt(from kindle: NSRunningApplication? = nil) async {
     guard !isImporting else { return }
     guard isEditable else {
-      notice = "Aguarde a resposta atual ou clique em Parar antes de trocar o trecho."
+      notice = "Wait for the current reply or click Stop before changing the passage."
       return
     }
     guard let index = library.books.firstIndex(where: { $0.id == library.selectedBookID }) else {
       showNewBook = true
-      notice = "Adicione o livro e clique em Colar trecho."
+      notice = "Add a book, then click Paste passage."
       return
     }
     isImporting = true
@@ -205,7 +207,7 @@ final class AppModel: ObservableObject {
     let savedPath = UserDefaults.standard.string(forKey: "codexExecutable")
     let executable = savedPath.map { URL(fileURLWithPath: $0) } ?? CodexClient.findExecutable()
     guard let executable else {
-      notice = "Codex não encontrado. Instale o Codex ou escolha o executável no menu de conexão."
+      notice = "Couldn't find Codex. Install it or choose its executable from the Codex menu."
       return
     }
     let connection = CodexClient(executable: executable)
@@ -219,7 +221,7 @@ final class AppModel: ObservableObject {
 
   func chooseExecutable() {
     let panel = NSOpenPanel()
-    panel.title = "Selecione o executável codex"
+    panel.title = "Choose the Codex executable"
     panel.canChooseDirectories = false
     panel.showsHiddenFiles = true
     if panel.runModal() == .OK, let url = panel.url {
@@ -237,7 +239,7 @@ final class AppModel: ObservableObject {
       return
     }
     isBusy = true
-    answerStatus = "Preparando resposta…"
+    answerStatus = "Preparing reply…"
     pendingQuestion = snapshot.currentChat.question
     streamingAnswer = ""
     notice = nil
@@ -267,7 +269,7 @@ final class AppModel: ObservableObject {
       saveNow()
       focusQuestion += 1
     } catch is CancellationError {
-      notice = "Resposta interrompida. Seu trecho e sua pergunta foram mantidos."
+      notice = "Reply stopped. Your passage and question are saved."
     } catch {
       notice = error.localizedDescription
     }
@@ -285,7 +287,7 @@ final class AppModel: ObservableObject {
       try store.save(library)
       storageError = nil
     } catch {
-      storageError = "Não foi possível salvar o histórico: \(error.localizedDescription)"
+      storageError = "Couldn't save your chat history. \(error.localizedDescription)"
     }
   }
 

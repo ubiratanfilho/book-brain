@@ -19,7 +19,7 @@ extension LibraryStore {
     defer { if access { source.stopAccessingSecurityScopedResource() } }
     let regularFile = source.resolvingSymlinksInPath()
     guard try regularFile.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else {
-      throw BookBrainError.message("Escolha um arquivo PDF.")
+      throw BookBrainError.message("Choose a PDF file.")
     }
     let destination = pdfURL(for: bookID)
     let fm = FileManager.default
@@ -39,13 +39,14 @@ extension LibraryStore {
 
 private func openBookPDF(_ url: URL) throws -> PDFDocument {
   guard let document = PDFDocument(url: url) else {
-    throw BookBrainError.message("Não foi possível abrir esse PDF.")
+    throw BookBrainError.message("Couldn't open this PDF.")
   }
   guard !document.isLocked && document.allowsCopying else {
     throw BookBrainError.message(
-      "Este PDF exige senha ou restringe a cópia. Escolha uma versão que permita consulta.")
+      "This PDF requires a password or restricts copying. Choose a copy that allows reading and extraction."
+    )
   }
-  guard document.pageCount > 0 else { throw BookBrainError.message("O PDF não contém páginas.") }
+  guard document.pageCount > 0 else { throw BookBrainError.message("This PDF has no pages.") }
   return document
 }
 
@@ -164,7 +165,7 @@ public actor BookPDFReader {
   }
 
   private var invalidArguments: BookBrainError {
-    .message("Consulta inválida. Confira a página e os parâmetros da ferramenta de PDF.")
+    .message("Invalid PDF request. Check the page number and tool parameters.")
   }
 
   private func integer(_ value: Any, in range: ClosedRange<Int>) throws -> Int {
@@ -179,7 +180,7 @@ public actor BookPDFReader {
   }
 
   private func pageImage(_ page: PDFPage) throws -> String {
-    guard let ref = page.pageRef else { throw BookBrainError.message("Página indisponível.") }
+    guard let ref = page.pageRef else { throw BookBrainError.message("Page unavailable.") }
     let box = page.bounds(for: .cropBox)
     let rotated = abs(page.rotation % 180) == 90
     let w = rotated ? box.height : box.width
@@ -192,7 +193,7 @@ public actor BookPDFReader {
       let ctx = CGContext(
         data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
         space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
-    else { throw BookBrainError.message("Falha ao renderizar a página.") }
+    else { throw BookBrainError.message("Couldn't render the page.") }
     let rect = CGRect(x: 0, y: 0, width: width, height: height)
     ctx.setFillColor(CGColor(gray: 1, alpha: 1))
     ctx.fill(rect)
@@ -203,11 +204,11 @@ public actor BookPDFReader {
     guard let image = ctx.makeImage(),
       let target = CGImageDestinationCreateWithData(
         data, UTType.jpeg.identifier as CFString, 1, nil)
-    else { throw BookBrainError.message("Falha ao preparar a imagem da página.") }
+    else { throw BookBrainError.message("Couldn't prepare the page image.") }
     CGImageDestinationAddImage(
       target, image, [kCGImageDestinationLossyCompressionQuality: 0.8] as CFDictionary)
     guard CGImageDestinationFinalize(target) else {
-      throw BookBrainError.message("Falha ao codificar a página.")
+      throw BookBrainError.message("Couldn't encode the page image.")
     }
     return "data:image/jpeg;base64," + (data as Data).base64EncodedString()
   }

@@ -73,7 +73,7 @@ public final class CodexClient {
   public func connect() async throws {
     if isConnected { return }
     guard process == nil else {
-      throw BookBrainError.message("A conexão com o Codex já está em andamento.")
+      throw BookBrainError.message("Codex is already connecting.")
     }
     let directory = FileManager.default.temporaryDirectory
       .appendingPathComponent("BookBrain-\(UUID().uuidString)", isDirectory: true)
@@ -113,7 +113,8 @@ public final class CodexClient {
     child.terminationHandler = { [weak self, weak child] _ in
       Task { @MainActor in
         guard let self, self.process === child else { return }
-        self.stop(error: BookBrainError.message("O Codex encerrou a conexão. Conecte novamente."))
+        self.stop(
+          error: BookBrainError.message("Codex closed the connection. Reconnect to continue."))
       }
     }
     do {
@@ -121,19 +122,19 @@ public final class CodexClient {
       _ = try await request(
         "initialize",
         [
-          "clientInfo": ["name": "book_brain", "title": "Book Brain", "version": "0.4.1"],
+          "clientInfo": ["name": "book_brain", "title": "Book Brain", "version": "0.5.0"],
           "capabilities": ["experimentalApi": true],
         ])
       try write(["method": "initialized"])
       let account = try await request("account/read", ["refreshToken": false])
       guard account["account"] is [String: Any] else {
         throw BookBrainError.message(
-          "Entre no Codex primeiro: execute codex login no Terminal e reconecte.")
+          "Run codex login in Terminal, then reconnect.")
       }
       // Map overrides merge with the user's config: explicitly disable each inherited MCP.
       let config = try await request("config/read", ["includeLayers": false])
       guard let values = config["config"] as? [String: Any] else {
-        throw BookBrainError.message("Não foi possível verificar as configurações do Codex.")
+        throw BookBrainError.message("Couldn't verify the Codex settings.")
       }
       threadConfig = ["model_reasoning_effort": "xhigh"]
       if let servers = values["mcp_servers"] as? [String: Any] {
@@ -178,14 +179,14 @@ public final class CodexClient {
       result["approvalPolicy"] as? String == "never"
     else {
       let error = BookBrainError.message(
-        "O Codex não confirmou as permissões restritas. Atualize o Codex antes de continuar.")
+        "Codex couldn't confirm the required permissions. Update Codex to continue.")
       stop(error: error)
       throw error
     }
     guard let thread = result["thread"] as? [String: Any], let id = thread["id"] as? String,
       savedID == nil || savedID == id
     else {
-      throw BookBrainError.message("O Codex não iniciou a conversa.")
+      throw BookBrainError.message("Codex couldn't start the chat.")
     }
     return id
   }
@@ -198,9 +199,9 @@ public final class CodexClient {
     async throws -> (text: String, threadID: String)
   {
     guard isConnected, let directory = workingDirectory else {
-      throw BookBrainError.message("Conecte ao Codex antes de enviar.")
+      throw BookBrainError.message("Connect to Codex before sending a question.")
     }
-    guard !asking else { throw BookBrainError.message("Aguarde a resposta atual.") }
+    guard !asking else { throw BookBrainError.message("Wait for the current reply to finish.") }
     asking = true
     defer { asking = false }
     let id = try await loadThread(threadID, in: directory, withPDF: pdf != nil)
@@ -232,7 +233,7 @@ public final class CodexClient {
         }
         self.stop(
           error: BookBrainError.message(
-            "A resposta demorou demais. Seu rascunho foi mantido; tente reconectar."))
+            "The reply timed out. Your draft is saved. Try reconnecting."))
       }
       Task {
         do {
@@ -245,7 +246,7 @@ public final class CodexClient {
             ])
           guard let turn = result["turn"] as? [String: Any], let turnID = turn["id"] as? String
           else {
-            throw BookBrainError.message("O Codex não identificou esta resposta.")
+            throw BookBrainError.message("Codex didn't identify this reply.")
           }
           activeTurn = turnID
           let events = earlyEvents
@@ -268,7 +269,7 @@ public final class CodexClient {
         do { try await Task.sleep(nanoseconds: self.requestTimeout * 1_000_000_000) } catch {
           return
         }
-        self.stop(error: BookBrainError.message("O Codex não respondeu a tempo. Tente reconectar."))
+        self.stop(error: BookBrainError.message("Codex timed out. Try reconnecting."))
       }
       do { try write(["id": id, "method": method, "params": params]) } catch { stop(error: error) }
     }
@@ -276,7 +277,7 @@ public final class CodexClient {
 
   private func write(_ message: [String: Any]) throws {
     guard let input, process?.isRunning == true else {
-      throw BookBrainError.message("A conexão com o Codex foi encerrada.")
+      throw BookBrainError.message("The connection to Codex closed.")
     }
     var data = try JSONSerialization.data(withJSONObject: message)
     data.append(10)
@@ -309,7 +310,7 @@ public final class CodexClient {
                 ]
               ], success: false)
           } else {
-            onLookup?("Consultando o PDF…")
+            onLookup?("Reading the PDF…")
             pdfCalls.append(
               Task {
                 let items: [[String: String]]
@@ -346,11 +347,11 @@ public final class CodexClient {
       if let error = message["error"] as? [String: Any] {
         continuation.resume(
           throwing: BookBrainError.message(
-            error["message"] as? String ?? "Erro de comunicação com o Codex."))
+            error["message"] as? String ?? "Couldn't communicate with Codex."))
       } else if let result = message["result"] as? [String: Any] {
         continuation.resume(returning: result)
       } else {
-        continuation.resume(throwing: BookBrainError.message("Resposta incompleta do Codex."))
+        continuation.resume(throwing: BookBrainError.message("Codex returned an incomplete reply."))
       }
       return
     }
@@ -381,7 +382,7 @@ public final class CodexClient {
       if method == "item/started",
         (params["item"] as? [String: Any])?["type"] as? String == "webSearch"
       {
-        onLookup?("Pesquisando na web…")
+        onLookup?("Searching the web…")
       }
       if method == "item/started", let item = params["item"] as? [String: Any],
         let type = item["type"] as? String,
@@ -393,7 +394,7 @@ public final class CodexClient {
       {
         stop(
           error: BookBrainError.message(
-            "O Codex tentou usar uma ferramenta fora das consultas permitidas. A sessão foi encerrada."
+            "Codex requested a tool outside the allowed lookups. The session has ended."
           ))
         return
       }
@@ -409,7 +410,7 @@ public final class CodexClient {
       case "completed":
         if accumulator.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
           finish(
-            .failure(BookBrainError.message("O Codex terminou sem uma resposta. Tente novamente.")))
+            .failure(BookBrainError.message("Codex finished without a reply. Try again.")))
         } else {
           finish(.success(accumulator.text))
         }
@@ -419,7 +420,7 @@ public final class CodexClient {
         finish(
           .failure(
             BookBrainError.message(
-              error?["message"] as? String ?? "Não foi possível concluir a resposta.")))
+              error?["message"] as? String ?? "Couldn't finish the reply.")))
       }
     default: break
     }

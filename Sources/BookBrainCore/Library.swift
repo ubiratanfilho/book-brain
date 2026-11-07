@@ -34,7 +34,7 @@ public struct ReadingChat: Codable, Identifiable, Equatable {
       let line = text.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
       if !line.isEmpty { return line.count > 64 ? String(line.prefix(63)) + "…" : line }
     }
-    return "Nova conversa"
+    return "New chat"
   }
 
   public var isBlank: Bool {

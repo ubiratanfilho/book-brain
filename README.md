@@ -4,16 +4,18 @@ Um companheiro de leitura nativo para macOS: copie um trecho no Kindle e convers
 
 ## Usar
 
-1. Abra **Book Brain** e escolha **Adicionar livro**. Informe o título e o autor. Se tiver um PDF, escolha **Anexar PDF (opcional)…** antes de confirmar. Para completar o autor em livros antigos, use **Livros → Editar título e autor…**. O aplicativo tenta conectar à sessão local do Codex.
-2. Clique em **Ativar captura direta no Kindle…**. No macOS 27 em inglês, abra **System Settings → Privacy & Security → Device Control and Data Access** e ligue **Book Brain**. Em versões anteriores, o painel se chama **Accessibility / Acessibilidade**. Se o interruptor já estiver ligado e o app ainda pedir acesso, encerre o Book Brain com **⌘Q** e reabra a mesma cópia do aplicativo.
-3. No Kindle, selecione um trecho e pressione **⌘⇧B**. O Book Brain aciona o comando Copiar no Kindle e abre a prévia da nova seleção. Para usar a cópia manual, escolha **Copiar** no Kindle e **Colar trecho** no Book Brain.
+1. Abra **Book Brain** e escolha **Add book**. Informe o título e o autor. Se tiver um PDF, escolha **Attach PDF (optional)…** antes de confirmar. Para completar o autor em livros antigos, use **Books → Edit title and author…**. O aplicativo tenta conectar à sessão local do Codex.
+2. Clique em **Enable Kindle capture…**. No macOS 27 em inglês, abra **System Settings → Privacy & Security → Device Control and Data Access** e ligue **Book Brain**. Em versões anteriores, o painel se chama **Accessibility / Acessibilidade**. Se o interruptor já estiver ligado e o app ainda pedir acesso, encerre o Book Brain com **⌘Q** e reabra a mesma cópia do aplicativo.
+3. No Kindle, selecione um trecho e pressione **⌘⇧B**. O Book Brain aciona o comando Copiar no Kindle e abre a prévia da nova seleção. Para usar a cópia manual, escolha **Copy** no Kindle e **Paste passage** no Book Brain.
 4. Escreva sua pergunta e envie com **⌘Return**. Também dá para perguntar sobre a obra sem selecionar um trecho.
-5. Continue perguntando no mesmo chat, inclusive ao trazer outro trecho. **Nova conversa** abre um chat vazio e guarda o anterior. Clique no título da conversa no topo do painel para reabrir um chat do livro. O menu **…** permite renomear ou excluir a conversa da biblioteca local.
-6. Use **Livros** para alternar entre leituras. Cada livro lembra a conversa selecionada. Cada conversa guarda suas perguntas, respostas, referência, trecho em foco e rascunho.
+5. Continue perguntando no mesmo chat, inclusive ao trazer outro trecho. **New chat** abre um chat vazio e guarda o anterior. Clique no título da conversa no topo do painel para reabrir um chat do livro. O menu **…** permite renomear ou excluir a conversa da biblioteca local.
+6. Use **Books** para alternar entre leituras. Cada livro lembra a conversa selecionada. Cada conversa guarda suas perguntas, respostas, referência, trecho em foco e rascunho.
+
+No topo da janela, **Appearance** permite escolher **System**, **Light** ou **Dark**. A escolha fica salva neste Mac. A interface está em inglês e o Codex responde no idioma da pergunta.
 
 O botão de alfinete mantém a janela acima do Kindle. Fechar a janela mantém o app na barra de menus; **⌘Q** encerra o aplicativo. O atalho só funciona enquanto o Book Brain está em execução. Se outro aplicativo já usa ⌘⇧B, um aviso orienta a usar o botão ou a barra de menus.
 
-Arraste uma borda para ajustar a janela até **300 × 280 pontos** ou use o botão **Reduzir janela**. No formato compacto, a pergunta e o envio ficam fixos, e o trecho pode ser expandido para edição. **Ampliar janela** restaura o tamanho anterior no mesmo monitor.
+Arraste uma borda para ajustar a janela até **300 × 280 pontos** ou use o botão **Compact window**. No formato compacto, a pergunta e o envio ficam fixos, e o trecho pode ser expandido para edição. **Expand window** restaura o tamanho anterior no mesmo monitor.
 
 ## Requisitos e compilação
 
@@ -28,7 +30,7 @@ open "build/Book Brain.app"
 
 O build gera um `.app` com assinatura ad hoc para uso local, na arquitetura do Mac que compila. Não é uma distribuição notarizada ou universal. Na primeira compilação, o Swift Package Manager baixa o MarkdownUI e suas dependências para renderizar as respostas.
 
-O app procura `codex` no PATH, no pacote do ChatGPT/Codex e nas instalações usuais do Homebrew. Se não o encontrar, use **Localizar executável do Codex…** no menu de conexão. A autenticação continua sendo gerenciada pelo Codex; o Book Brain não lê nem copia tokens. O uso segue a conta e os limites configurados no Codex.
+O app procura `codex` no PATH, no pacote do ChatGPT/Codex e nas instalações usuais do Homebrew. Se não o encontrar, use **Locate Codex executable…** no menu de conexão. A autenticação continua sendo gerenciada pelo Codex; o Book Brain não lê nem copia tokens. O uso segue a conta e os limites configurados no Codex.
 
 ## O que esta versão faz
 
@@ -44,13 +46,13 @@ O Codex recebe o título e o autor em todas as perguntas. Pode usar o que conhec
 ## Dados e limites
 
 - A captura direta usa a permissão de Acessibilidade para enviar ⌘C ao processo do Kindle que estava em primeiro plano ao pressionar **⌘⇧B**. Ela atualiza o clipboard como uma cópia manual. O app exige uma nova publicação após o comando e mostra o trecho antes do envio. Uma seleção sem permissão de cópia não é importada.
-- O conteúdo do clipboard é lido ao acionar o atalho ou **Colar trecho**. Na cópia manual, o contador de alterações registrado quando o Kindle ganhou foco permite detectar uma cópia antiga. A pergunta fica suspensa até você copiar, editar ou escolher continuar com o contexto anterior.
+- O conteúdo do clipboard é lido ao acionar o atalho ou **Paste passage**. Na cópia manual, o contador de alterações registrado quando o Kindle ganhou foco permite detectar uma cópia antiga. A pergunta fica suspensa até você copiar, editar ou escolher continuar com o contexto anterior.
 - Ao enviar, o Codex recebe o título, o autor, a referência, o trecho atual e a pergunta. Ele usa o contexto da sessão retomada e pode usar e gerar memórias locais.
 - Limites por pergunta: **12.000 caracteres no trecho** e **4.000 na pergunta**. O histórico integral fica disponível no Book Brain. O Codex gerencia a janela de contexto da sessão.
 - Livros, trechos, perguntas, respostas e rascunhos ficam em `~/Library/Application Support/BookBrain/library.json`. O arquivo é texto legível, com permissão `0600`, em uma pasta criada com `0700`. Não há criptografia própria nem sincronização.
 - O PDF selecionado é copiado para `~/Library/Application Support/BookBrain/PDFs/` e fica disponível a todos os chats daquele livro, mesmo que o original mude de lugar. O Codex pode buscar palavras no texto e solicitar páginas individuais. Páginas digitalizadas podem ser consultadas como imagem pelo número da página. Cada consulta envia ao Codex os trechos ou a página solicitada. PDFs bloqueados ou com restrição de cópia são recusados.
 - Arquivos inválidos não são substituídos por uma biblioteca vazia. O app mostra o erro e bloqueia edições para preservar o original.
-- **Excluir conversa** e **Excluir livro** removem os respectivos registros da biblioteca do Book Brain após confirmação. Excluir um livro também remove a cópia local de seu PDF. O Codex mantém seu próprio histórico e suas memórias no Mac.
+- **Delete…** e **Delete current book…** removem os respectivos registros da biblioteca do Book Brain após confirmação. Excluir um livro também remove a cópia local de seu PDF. O Codex mantém seu próprio histórico e suas memórias no Mac.
 
 ## Integração com o Codex
 

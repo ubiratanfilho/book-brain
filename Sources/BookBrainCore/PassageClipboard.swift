@@ -37,7 +37,7 @@ public final class PassageClipboard {
         guard !excerpt.isEmpty else { break }
         guard excerpt.count <= ReadingPrompt.excerptLimit else {
           throw BookBrainError.message(
-            "A cópia ultrapassa 12.000 caracteres. Copie um trecho menor.")
+            "The selection exceeds 12,000 characters. Copy a shorter passage.")
         }
         previousGeneration = generation
         return excerpt
@@ -47,11 +47,11 @@ public final class PassageClipboard {
     } while ContinuousClock.now < deadline
     if copySelection != nil {
       throw BookBrainError.message(
-        "O Kindle não disponibilizou um novo trecho. Selecione o texto no livro e pressione ⌘⇧B novamente."
+        "Kindle didn't provide a new passage. Select text in the book and press ⌘⇧B again."
       )
     }
     throw BookBrainError.message(
-      "Falta uma nova cópia. No Kindle, selecione o trecho, clique em Copiar (ou use ⌘C) e pressione ⌘⇧B."
+      "A fresh copy is needed. Select a passage in Kindle, choose Copy (or press ⌘C), then press ⌘⇧B."
     )
   }
 }

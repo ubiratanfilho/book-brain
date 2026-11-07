@@ -212,7 +212,7 @@ final class CodexClientTests: XCTestCase {
         file: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)),
       onLookup: { lookups.append($0) }, onUpdate: { _ in })
     XCTAssertEqual(answer.text, "Olá, leitor. Contexto preservado.")
-    XCTAssertEqual(lookups, ["Pesquisando na web…"])
+    XCTAssertEqual(lookups, ["Searching the web…"])
   }
 
   func testUnexpectedApprovalIsDenied() async throws {
@@ -230,7 +230,7 @@ final class CodexClientTests: XCTestCase {
     do {
       _ = try await client.ask(prompt: prompt("HANG"), threadID: nil) { _ in }
       XCTFail("Expected timeout")
-    } catch { XCTAssertTrue(error.localizedDescription.contains("demorou")) }
+    } catch { XCTAssertTrue(error.localizedDescription.contains("timed out")) }
     XCTAssertFalse(client.isConnected)
     try await client.connect()
     _ = try await client.ask(prompt: prompt("OK"), threadID: nil) { _ in }
@@ -260,11 +260,12 @@ final class CodexClientTests: XCTestCase {
     var book = Book(title: "Livro sintético para teste", author: "Autora de teste")
     book.currentChat.excerpt = "Uma caixa tinha três pedras. Ana colocou mais duas pedras na caixa."
     book.currentChat.question =
-      "Quantas pedras ficaram na caixa? Responda com o número em algarismos."
+      "Quantas pedras ficaram na caixa? Escreva o número por extenso."
     let answer = try await client.ask(
       prompt: ReadingPrompt.make(book: book), threadID: book.currentChat.threadID
     ) { _ in }
-    XCTAssertTrue(answer.text.contains("5"), "Unexpected answer: \(answer)")
+    XCTAssertTrue(
+      answer.text.localizedCaseInsensitiveContains("cinco"), "Unexpected answer: \(answer)")
     book.currentChat.threadID = answer.threadID
     book.currentChat.exchanges.append(
       Exchange(
@@ -273,7 +274,7 @@ final class CodexClientTests: XCTestCase {
       ))
     book.currentChat.excerpt = ""
     book.currentChat.question =
-      "Se Ana tirar uma das pedras que contamos, quantas restam? Responda com o número em algarismos."
+      "If Ana removes one of the stones we counted, how many remain? Spell out the number."
     let payload = try ReadingPrompt.make(book: book)
     XCTAssertFalse(payload.contains("Uma caixa tinha três pedras"))
     client.disconnect()
@@ -282,6 +283,7 @@ final class CodexClientTests: XCTestCase {
       prompt: ReadingPrompt.make(book: book), threadID: book.currentChat.threadID
     ) { _ in }
     XCTAssertEqual(followUp.threadID, answer.threadID)
-    XCTAssertTrue(followUp.text.contains("4"), "History was not preserved: \(followUp)")
+    XCTAssertTrue(
+      followUp.text.localizedCaseInsensitiveContains("four"), "Unexpected follow-up: \(followUp)")
   }
 }

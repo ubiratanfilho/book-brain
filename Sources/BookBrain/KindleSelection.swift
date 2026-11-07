@@ -11,7 +11,7 @@ enum KindleSelection {
     guard kindle.bundleIdentifier == bundleID, !kindle.isTerminated,
       kindle == NSWorkspace.shared.frontmostApplication
     else {
-      throw BookBrainError.message("Volte ao Kindle e pressione ⌘⇧B com o trecho selecionado.")
+      throw BookBrainError.message("Return to Kindle, select a passage, and press ⌘⇧B.")
     }
 
     guard let source = CGEventSource(stateID: .privateState),
@@ -19,7 +19,7 @@ enum KindleSelection {
         keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_C), keyDown: true),
       let up = CGEvent(
         keyboardEventSource: source, virtualKey: CGKeyCode(kVK_ANSI_C), keyDown: false)
-    else { throw BookBrainError.message("O macOS não conseguiu acionar Copiar no Kindle.") }
+    else { throw BookBrainError.message("macOS couldn't send the Copy command to Kindle.") }
 
     // Use only Command, even if Shift is still held from the global shortcut.
     down.flags = .maskCommand
