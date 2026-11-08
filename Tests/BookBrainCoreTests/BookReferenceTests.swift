@@ -6,7 +6,7 @@ import XCTest
 
 final class BookReferenceTests: XCTestCase {
   private func makePDF(in directory: URL, pages: [String]) throws -> URL {
-    let url = directory.appendingPathComponent("manuscrito.pdf")
+    let url = directory.appendingPathComponent("manuscript.pdf")
     var bounds = CGRect(x: 0, y: 0, width: 500, height: 650)
     let context = try XCTUnwrap(CGContext(url as CFURL, mediaBox: &bounds, nil))
     for text in pages {
@@ -35,22 +35,22 @@ final class BookReferenceTests: XCTestCase {
     try fm.createDirectory(at: directory, withIntermediateDirectories: true)
     defer { try? fm.removeItem(at: directory) }
     let store = LibraryStore(directory: directory.appendingPathComponent("library"))
-    let source = try makePDF(in: directory, pages: ["Prefacio", "O codigo do lacre e Safira.", ""])
-    var book = Book(title: "Caderno", author: "Ana Vale")
+    let source = try makePDF(in: directory, pages: ["Preface", "The seal code is Sapphire.", ""])
+    var book = Book(title: "Field Notes", author: "Anne Vale")
     book.pdf = try store.importPDF(source, for: book.id)
     XCTAssertEqual(book.pdf?.pageCount, 3)
     var lib = Library()
     lib.books = [book]
     try store.save(lib)
     let restored = try XCTUnwrap(store.load().books.first)
-    XCTAssertEqual(restored.author, "Ana Vale")
+    XCTAssertEqual(restored.author, "Anne Vale")
     XCTAssertEqual(restored.pdf, book.pdf)
     try fm.removeItem(at: source)
     let reader = BookPDFReader(file: store.pdfURL(for: restored.id))
-    let hits = try await reader.contents(for: BookPDFReader.search, arguments: ["query": "LACRE"])
+    let hits = try await reader.contents(for: BookPDFReader.search, arguments: ["query": "SEAL"])
     XCTAssertTrue(hits.first?["text"]?.contains("PDF p. 2") == true)
     let page = try await reader.contents(for: BookPDFReader.read, arguments: ["page": 2])
-    XCTAssertTrue(page.first?["text"]?.contains("Safira") == true)
+    XCTAssertTrue(page.first?["text"]?.contains("Sapphire") == true)
     let scan = try await reader.contents(for: BookPDFReader.read, arguments: ["page": 3])
     XCTAssertTrue(scan.last?["imageUrl"]?.hasPrefix("data:image/jpeg;base64,") == true)
     for args: [String: Any] in [
@@ -61,7 +61,7 @@ final class BookReferenceTests: XCTestCase {
         XCTFail("Invalid PDF request accepted")
       } catch {}
     }
-    book.currentChat.question = "Qual é o código?"
+    book.currentChat.question = "What is the code?"
     let payload = try XCTUnwrap(
       JSONSerialization.jsonObject(with: Data(ReadingPrompt.make(book: book).utf8))
         as? [String: Any])
@@ -88,18 +88,18 @@ final class BookReferenceTests: XCTestCase {
     let source = try makePDF(
       in: directory,
       pages: [
-        "Caderno da expedicao: prefacio.", "O codigo do lacre e \(seal).",
-        "A gaveta tem o codigo \(drawer).",
+        "Preface to the expedition notes.", "The seal code is \(seal).",
+        "The drawer code is \(drawer).",
       ])
     let store = LibraryStore(directory: directory.appendingPathComponent("library"))
-    var book = Book(title: "Caderno da expedição sintética", author: "Ana Vale")
+    var book = Book(title: "Synthetic Expedition Notes", author: "Anne Vale")
     book.pdf = try store.importPDF(source, for: book.id)
     let client = CodexClient(executable: try XCTUnwrap(CodexClient.findExecutable()))
     defer { client.disconnect() }
-    for (index, entry) in [("lacre", seal), ("gaveta", drawer)].enumerated() {
+    for (index, entry) in [("seal", seal), ("drawer", drawer)].enumerated() {
       try await client.connect()
       book.currentChat.question =
-        "Consulte a página \(index+2) do PDF anexado. Qual é o código de \(entry.0)? Informe o código exato e a página."
+        "Read page \(index + 2) of the attached PDF. What is the \(entry.0) code? Give the exact code and page number."
       var lookedUp = false
       let answer = try await client.ask(
         prompt: ReadingPrompt.make(book: book), threadID: book.currentChat.threadID,
@@ -125,7 +125,7 @@ final class BookReferenceTests: XCTestCase {
     try await client.connect()
     var book = Book(title: "Frankenstein", author: "Mary Wollstonecraft Shelley")
     book.currentChat.question =
-      "Pesquise agora na web e confira no site do Project Gutenberg o título da obra no registro do ebook 84. Responda em uma frase e inclua o link Markdown do registro consultado."
+      "Search the web and check the title of eBook 84 on Project Gutenberg. Answer in one sentence with a Markdown link to the entry you checked."
     var searched = false
     let answer = try await client.ask(
       prompt: ReadingPrompt.make(book: book), threadID: nil,

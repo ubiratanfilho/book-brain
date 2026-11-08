@@ -1,96 +1,90 @@
 # Book Brain
 
-Um companheiro de leitura nativo para macOS: copie um trecho no Kindle e converse sobre ele com o Codex em uma janela flutuante.
+Select a passage in Kindle for Mac and press **⌘⇧B** to discuss it with Codex in a floating window. You can also ask about a book by title and author, or attach a PDF for Codex to consult.
 
-## Usar
+## Getting started
 
-1. Abra **Book Brain** e escolha **Add book**. Informe o título e o autor. Se tiver um PDF, escolha **Attach PDF (optional)…** antes de confirmar. Para completar o autor em livros antigos, use **Books → Edit title and author…**. O aplicativo tenta conectar à sessão local do Codex.
-2. Clique em **Enable Kindle capture…**. No macOS 27 em inglês, abra **System Settings → Privacy & Security → Device Control and Data Access** e ligue **Book Brain**. Em versões anteriores, o painel se chama **Accessibility / Acessibilidade**. Depois de atualizar, o interruptor pode continuar ligado para a assinatura da versão anterior. Se **Enable Kindle capture…** continuar aparecendo após reabrir o app, encerre o Book Brain com **⌘Q**, remova apenas a entrada **Book Brain** desse painel e adicione a cópia atual de `build/Book Brain.app`. Reabra essa cópia e teste **⌘⇧B** com um novo trecho selecionado no Kindle.
-3. No Kindle, selecione um trecho e pressione **⌘⇧B**. O Book Brain aciona o comando Copiar no Kindle e abre a prévia da nova seleção. Se a cópia incluir a página ou posição do Kindle, o atalho preenche **Chapter or page**. Você pode editar o campo. Se o novo trecho vier sem referência reconhecível, o campo fica vazio. Para usar a cópia manual, escolha **Copy** no Kindle e **Paste passage** no Book Brain.
-4. Escreva sua pergunta e envie com **Enter**. Use **Shift+Enter** para inserir uma nova linha na pergunta. Também dá para perguntar sobre a obra sem selecionar um trecho.
-5. Continue perguntando no mesmo chat, inclusive ao trazer outro trecho. **New chat** abre um chat vazio e guarda o anterior. Clique no título da conversa no topo do painel para reabrir um chat do livro. O menu **…** permite renomear ou excluir a conversa da biblioteca local.
-6. Use **Books** para alternar entre leituras. Cada livro lembra a conversa selecionada. Cada conversa guarda suas perguntas, respostas, referência, trecho em foco e rascunho.
+1. Open Book Brain and choose **Add book**. Enter the title and author. To include a PDF, choose **Attach PDF (optional)…** before saving. For a book created in an earlier version, use **Books → Edit title and author…** to add the author. Book Brain connects to your local Codex session.
+2. Click **Enable Kindle capture…**. On macOS 27, open **System Settings → Privacy & Security → Device Control and Data Access** and turn on **Book Brain**. Earlier versions call this panel **Accessibility**. After an update, the switch can still refer to the previous app signature. If **Enable Kindle capture…** still appears after reopening the app, quit with **⌘Q**, remove the **Book Brain** entry from that panel, and add the current copy of `build/Book Brain.app`. Reopen that copy and try **⌘⇧B** with a new selection in Kindle.
+3. Select a passage in Kindle and press **⌘⇧B**. Book Brain sends the Copy command to Kindle and displays the selection for review. When Kindle includes a recognizable page or location, Book Brain fills in **Chapter or page**. You can edit the reference. A new capture with no recognizable reference clears the field. To copy manually, choose **Copy** in Kindle and **Paste passage** in Book Brain.
+4. Type your question and press **Enter** to send. **Shift+Enter** starts a new line. You can ask about the book with or without a selected passage.
+5. Keep asking questions in the same chat, even after capturing another passage. **New chat** starts a fresh conversation and saves the previous one. Click the chat title to reopen a conversation for the current book. The **…** menu lets you rename or delete a local chat.
+6. Use **Books** to switch between books. Each book remembers its selected chat. Each chat keeps its questions, answers, reading reference, selected passage, and draft.
 
-No topo da janela, **Appearance** permite escolher **System**, **Light** ou **Dark**. A escolha fica salva neste Mac. A interface está em inglês e o Codex responde no idioma da pergunta.
+Choose **System**, **Light**, or **Dark** from **Appearance** at the top of the window. Book Brain saves your choice on this Mac. The interface is in English. Codex replies in the language of your question unless you request another language.
 
-O botão de alfinete mantém a janela acima do Kindle. Fechar a janela mantém o app na barra de menus; **⌘Q** encerra o aplicativo. O atalho só funciona enquanto o Book Brain está em execução. Se outro aplicativo já usa ⌘⇧B, um aviso orienta a usar o botão ou a barra de menus.
+The pin button keeps the window above Kindle. Closing the window leaves Book Brain in the menu bar. **⌘Q** quits the app. The shortcut works while Book Brain is running. If another app has claimed **⌘⇧B**, Book Brain shows a notice and offers the window and menu bar actions.
 
-Arraste uma borda para ajustar a janela até **300 × 280 pontos** ou use o botão **Compact window**. No formato compacto, a pergunta e o envio ficam fixos, e o trecho pode ser expandido para edição. **Expand window** restaura o tamanho anterior no mesmo monitor.
+Drag a window edge to resize it down to **300 × 280 points**, or choose **Compact window**. In compact mode the question field and send button stay visible, and you can expand the passage to edit it. **Expand window** restores the previous size on the same display.
 
-## Requisitos e compilação
+## Requirements and build
 
-- macOS 14 ou superior; Swift 6 / Xcode 16 ou superior para compilar.
-- Codex CLI com suporte aos perfis de permissões do app-server. Versão validada: **0.167.0-alpha.3.2**, incluída no ChatGPT instalado no Mac de desenvolvimento.
-- Uma sessão autenticada do Codex. Se necessário, execute `codex login` antes de abrir o app.
+- macOS 14 or later. Building requires Swift 6 and Xcode 16 or later.
+- A Codex CLI that supports app-server permission profiles. Book Brain was tested with **0.167.0-alpha.3.2**, bundled with ChatGPT on the development Mac.
+- An authenticated Codex session. If needed, run `codex login` before opening the app.
 
 ```bash
 ./scripts/build-app.sh
 open "build/Book Brain.app"
 ```
 
-O build gera um `.app` com assinatura ad hoc para uso local, na arquitetura do Mac que compila. Não é uma distribuição notarizada ou universal. Na primeira compilação, o Swift Package Manager baixa o MarkdownUI e suas dependências para renderizar as respostas.
+The script builds an ad hoc signed app for local use on the build Mac’s architecture. It produces a single-architecture bundle and skips notarization. On the first build, Swift Package Manager downloads MarkdownUI and its dependencies for rendering answers.
 
-O app procura `codex` no PATH, no pacote do ChatGPT/Codex e nas instalações usuais do Homebrew. Se não o encontrar, use **Locate Codex executable…** no menu de conexão. A autenticação continua sendo gerenciada pelo Codex; o Book Brain não lê nem copia tokens. O uso segue a conta e os limites configurados no Codex.
+Book Brain looks for `codex` on your PATH, in the ChatGPT and Codex app bundles, and in the usual Homebrew locations. If it cannot find the executable, choose **Locate Codex executable…** in the connection menu. Codex handles authentication and applies your account’s usage limits. Book Brain does not read or copy authentication tokens.
 
-## O que esta versão faz
+## Reading with Codex
 
-- Janela flutuante, ícone na barra de menus e atalho global.
-- Trecho editável, referência opcional de capítulo/página e sugestões de perguntas.
-- Respostas em streaming, cancelamento e reconexão.
-- Conversas salvas por livro, com o trecho exato associado a cada pergunta concluída. A primeira pergunta dá nome à conversa até você escolher outro título.
-- Rascunhos preservados após erro ou cancelamento; respostas parciais não entram no histórico.
-- Cada pergunta continua na sessão do chat selecionado. As memórias locais do Codex podem personalizar exemplos e explicações.
+Answers stream into the chat. You can stop a reply and reconnect. Book Brain keeps your draft after an error or cancellation and saves only completed exchanges. Each exchange includes the passage you sent with the question. The first question names the chat until you rename it.
 
-O Codex recebe o título e o autor em todas as perguntas. Pode usar o que conhece da obra e explicar o trecho selecionado. Para perguntas sobre um PDF anexado, consulta a cópia do livro e cita a página física do arquivo. Quando faltar informação confiável, a instrução é pesquisar na web e incluir links para as fontes consultadas.
+Each question includes the book title and author. Codex can draw on its knowledge of the work and explain the selected passage. For questions about an attached PDF, the instructions direct Codex to consult the saved copy and cite the physical page in the file. When it needs more evidence, Codex is instructed to search the web and link to the sources it consulted. Local Codex memories can help tailor examples and explanations.
 
-## Dados e limites
+## Data and limits
 
-- A captura direta usa a permissão de Acessibilidade para enviar ⌘C ao processo do Kindle que estava em primeiro plano ao pressionar **⌘⇧B**. Ela atualiza o clipboard como uma cópia manual. O app exige uma nova publicação após o comando e mostra o trecho antes do envio. Uma seleção sem permissão de cópia não é importada.
-- O conteúdo do clipboard é lido ao acionar o atalho ou **Paste passage**. Na cópia manual, o contador de alterações registrado quando o Kindle ganhou foco permite detectar uma cópia antiga. A pergunta fica suspensa até você copiar, editar ou escolher continuar com o contexto anterior.
-- Ao enviar, o Codex recebe o título, o autor, a referência, o trecho atual e a pergunta. Ele usa o contexto da sessão retomada e pode usar e gerar memórias locais.
-- Limites por pergunta: **12.000 caracteres no trecho** e **4.000 na pergunta**. O histórico integral fica disponível no Book Brain. O Codex gerencia a janela de contexto da sessão.
-- Livros, trechos, perguntas, respostas e rascunhos ficam em `~/Library/Application Support/BookBrain/library.json`. O arquivo é texto legível, com permissão `0600`, em uma pasta criada com `0700`. Não há criptografia própria nem sincronização.
-- O PDF selecionado é copiado para `~/Library/Application Support/BookBrain/PDFs/` e fica disponível a todos os chats daquele livro, mesmo que o original mude de lugar. O Codex pode buscar palavras no texto e solicitar páginas individuais. Páginas digitalizadas podem ser consultadas como imagem pelo número da página. Cada consulta envia ao Codex os trechos ou a página solicitada. PDFs bloqueados ou com restrição de cópia são recusados.
-- Arquivos inválidos não são substituídos por uma biblioteca vazia. O app mostra o erro e bloqueia edições para preservar o original.
-- **Delete…** e **Delete current book…** removem os respectivos registros da biblioteca do Book Brain após confirmação. Excluir um livro também remove a cópia local de seu PDF. O Codex mantém seu próprio histórico e suas memórias no Mac.
+- Direct capture uses the macOS permission to send **⌘C** to the Kindle process that had focus when you pressed **⌘⇧B**. This updates the clipboard just like choosing **Copy**. Book Brain waits for a fresh copy and shows the passage before you send it. Kindle’s copy restrictions apply.
+- Book Brain reads clipboard text when you use the shortcut or **Paste passage**. When Kindle gains focus, the app records the clipboard change count so it can detect a stale manual copy. If capture fails, sending is paused until you copy again, edit the passage, or choose **Keep the previous context**.
+- Sending a question gives Codex the title, author, reading reference, current passage, and question. Codex resumes the chat session and can use and generate local memories.
+- Each question allows up to **12,000 characters of selected text** and **4,000 characters of question text**. Book Brain keeps the full chat history. Codex manages the session’s context window.
+- Book Brain stores books, passages, questions, answers, and drafts in `~/Library/Application Support/BookBrain/library.json`. It writes the file as plain text with permissions `0600` in a directory created with permissions `0700`. Book Brain does not provide its own encryption or sync.
+- The selected PDF is copied to `~/Library/Application Support/BookBrain/PDFs/`. All chats for that book can use it even if you move the original. Codex can search the text, read a page by number, or request an image of a scanned page. Each lookup sends Codex the requested extracts or page. Book Brain rejects locked PDFs and PDFs that restrict copying.
+- If the library cannot be read, the app displays the error and blocks edits to preserve the original file.
+- **Delete…** removes a chat and **Delete current book…** removes a book after confirmation. Deleting a book also removes its saved PDF. Codex maintains its own history and memories on the Mac.
 
-## Integração com o Codex
+## Codex integration
 
-Swift/Foundation inicia um processo `codex app-server` via stdin/stdout. O aplicativo usa `initialize`, `account/read`, `config/read`, `thread/start`, `thread/resume` e `turn/start`, recebendo eventos JSONL.
+Book Brain starts `codex app-server` using Swift and Foundation. It communicates over standard input and output using `initialize`, `account/read`, `config/read`, `thread/start`, `thread/resume`, and `turn/start`, and receives JSONL events.
 
-A primeira resposta associa o chat a uma sessão persistente do Codex. O Book Brain guarda o identificador e o retoma na próxima pergunta, inclusive depois de fechar o aplicativo. Cada resposta libera a assinatura da sessão quando termina. O Codex processa conversas elegíveis para memória em segundo plano.
+The first completed answer associates the chat with a persistent Codex session. Book Brain stores the session ID and uses it for the next question, including after an app restart. It releases the session subscription at the end of each reply. Codex processes eligible conversations for memory in the background.
 
-Na atualização, o histórico anterior de cada livro vira sua primeira conversa, com todos os trechos, respostas e rascunhos. Como as versões antigas não guardavam um identificador comum de sessão, a primeira pergunta de continuação fornece até seis trocas antigas completas, limitadas a 24.000 caracteres. A partir dela, o Codex retoma a sessão do chat.
+On upgrade from an older library, each book’s previous history becomes its first chat, including passages, replies, and drafts. Older versions did not store a shared session ID. The first follow-up supplies up to six complete earlier exchanges, capped at 24,000 characters. Subsequent questions resume the Codex session.
 
-Os overrides valem somente para o processo filho. O app habilita o uso e a geração de memórias pelo Codex. As ferramentas dedicadas de memória, o shell, a execução de código, os plugins, os conectores, o navegador, a descoberta de skills e os servidores MCP herdados ficam desabilitados. O perfil `book-brain` permite apenas leitura de caminhos mínimos do runtime e de uma pasta temporária vazia, sem rede para execução local. A pesquisa na web é feita pelo serviço do Codex. O app atende apenas consultas de PDF da conversa e do turno ativos. Outros pedidos de ferramentas ou aprovações são recusados, e um evento de execução inesperado encerra a sessão. O processo do Codex ainda precisa acessar sua autenticação e a rede para inferência.
+Configuration overrides apply only to the child process. Book Brain enables Codex memory use and generation. It disables dedicated memory tools, shell and code execution, plugins, connectors, browser access, skill discovery, and inherited MCP servers. The `book-brain` permission profile grants read-only access to essential runtime paths and an empty temporary folder. Local tool execution has no network access. The Codex service handles web search. Book Brain accepts PDF queries only for the active chat and turn. It rejects other tool and approval requests and closes the session on an unexpected execution event. The Codex process still needs access to its authentication and to the network for inference.
 
-O Book Brain usa **GPT-6.1 Terra** (`gpt-6.1-terra`) com raciocínio **Extra High** (`xhigh`) e modo **Fast** (`priority`) em cada pergunta. A configuração é específica das conversas do aplicativo. A API de perfis de permissões é experimental: atualizações do Codex podem exigir ajustes. Falhas são exibidas; não há fallback para permissões mais amplas.
+Book Brain uses **GPT-6.1 Terra** (`gpt-6.1-terra`) with **Extra High** reasoning (`xhigh`) and **Fast** mode (`priority`) for each question. These settings apply to chats created by the app. The permission profile API is experimental and may change in a Codex update. If the profile fails, Book Brain displays the error and keeps the existing permission limits. [Codex App Server](https://learn.chatgpt.com/docs/app-server) · [Permission profiles](https://learn.chatgpt.com/docs/permissions)
 
-Referências: [Codex App Server](https://learn.chatgpt.com/docs/app-server), [perfis de permissões](https://learn.chatgpt.com/docs/permissions).
-
-## Desenvolvimento e validação
+## Development and testing
 
 ```bash
-# Testes locais sem rede, credenciais ou conteúdo real de livros
+# Run local tests with synthetic data. The tests do not need a network connection or credentials.
 swift test
 
-# Testes opcionais com a sessão do Codex, incluindo PDF sintético e pesquisa na web
+# Run the opt-in tests with your Codex session, including a synthetic PDF and live web search.
 BOOK_BRAIN_LIVE_TEST=1 swift test
 
-# Formatação
+# Format the source and test fixture.
 swift format format --in-place --recursive Sources Tests Package.swift
 python3 -m black Tests/BookBrainCoreTests/Fixtures/fake-codex.py
 ```
 
-Os testes verificam persistência, arquivo corrompido, limites de contexto, histórico por livro, fragmentação de UTF-8, eventos de outra conversa, streaming, falha do servidor, timeouts, reconexão, cancelamento e recusa de ferramentas. A integração real foi validada no macOS com Xcode 27. O workflow do GitHub executa a suíte sem rede e compila o `.app`.
+The suite covers persistence, corrupt libraries, context limits, per-book chat history, fragmented UTF-8, events from other chats, streaming, server failures, timeouts, reconnection, cancellation, and rejected tool calls. Live Codex integration was tested on macOS with Xcode 27. The GitHub Actions workflow runs the offline suite and builds the app.
 
-O teste visual do Kindle e do atalho depende de uma sessão do macOS desbloqueada. Compilação e teste de inferência não comprovam que um livro específico permite copiar trechos.
+Testing the Kindle shortcut requires an unlocked macOS session and a selection that Kindle allows you to copy.
 
-## Estrutura
+## Project layout
 
-- `Sources/BookBrain`: SwiftUI, janela AppKit, barra de menus, atalho Carbon e estado da aplicação.
-- `Sources/BookBrainCore`: persistência, construção do contexto e cliente do Codex.
-- `Tests/BookBrainCoreTests`: testes e processo simulado do app-server.
-- `scripts/build-app.sh`: compilação e empacotamento local.
+- `Sources/BookBrain` contains the SwiftUI views, AppKit window, menu bar item, Carbon shortcut, and app state.
+- `Sources/BookBrainCore` contains persistence, reading context, and the Codex client.
+- `Tests/BookBrainCoreTests` contains core tests and the simulated app-server process.
+- `Tests/BookBrainTests` covers Markdown rendering and the question field’s keyboard behavior.
+- `scripts/build-app.sh` builds and packages the macOS app.
 
-Projeto pessoal, sem afiliação com Amazon ou OpenAI.
+Book Brain is a personal project with no affiliation with Amazon or OpenAI.

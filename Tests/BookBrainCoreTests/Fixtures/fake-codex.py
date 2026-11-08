@@ -155,14 +155,14 @@ for line in sys.stdin:
                 "phase": "final_answer",
             },
         )
-        event("item/agentMessage/delta", itemId="answer", delta="Olá, ")
-        event("item/agentMessage/delta", itemId="answer", delta="leitor.")
+        event("item/agentMessage/delta", itemId="answer", delta="Hello, ")
+        event("item/agentMessage/delta", itemId="answer", delta="reader! 📖")
         event(
             "item/completed",
             item={
                 "id": "answer",
                 "type": "agentMessage",
-                "text": "Olá, leitor. Contexto preservado.",
+                "text": "Hello, reader! 📖 Your context is saved.",
                 "phase": "final_answer",
             },
         )

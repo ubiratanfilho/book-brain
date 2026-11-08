@@ -15,7 +15,7 @@ final class AnswerMarkdownTests: XCTestCase {
 
   @MainActor
   func testThirdLevelHeadingHidesMarkersAndHasDistinctTypography() throws {
-    let title = "2. Outlier coletivo"
+    let title = "2. Collective outlier"
     let heading = try render("### " + title)
     XCTAssertEqual(
       heading.tiffRepresentation, try render("### " + title + " ###").tiffRepresentation)
@@ -24,7 +24,7 @@ final class AnswerMarkdownTests: XCTestCase {
 
   @MainActor
   func testCodeFencesHideLanguageAndPreserveLiteralHashesWhileStreaming() throws {
-    let content = "### login → consulta\n  transferência"
+    let content = "### login → balance inquiry\n  transfer"
     let code = try render("```text\n" + content + "\n```")
     for equivalent in ["~~~\n" + content + "\n~~~", "```text\n" + content] {
       XCTAssertEqual(code.tiffRepresentation, try render(equivalent).tiffRepresentation)

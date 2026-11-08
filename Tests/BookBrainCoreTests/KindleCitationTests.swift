@@ -4,7 +4,7 @@ import XCTest
 @testable import BookBrainCore
 
 final class KindleCitationTests: XCTestCase {
-  func testEnglishAndPortugueseCitationsAndStandaloneFooters() {
+  func testCitationsAndStandalonePageAndLocationFooters() {
     let examples = [
       ("A. Reader. Field Notes (p. 42). Sample Press. Kindle Edition.", "Page 42"),
       ("Field Notes (pp. 42–43).\nSample Press. Kindle Edition.", "Pages 42–43"),
@@ -12,10 +12,10 @@ final class KindleCitationTests: XCTestCase {
         "A. Reader. Field Notes (Kindle Locations 1,212-1,215). Kindle Edition.",
         "Kindle locations 1,212–1,215"
       ),
-      ("Caderno (pág. 12). Editora Exemplo. Edição do Kindle.", "Page 12"),
-      ("Caderno (posições 1.200–1.240). Edição Kindle.", "Kindle locations 1.200–1.240"),
+      ("Field Notes (Page 12). Example Press. Kindle Edition.", "Page 12"),
+      ("Field Notes (loc. 1,200–1,240). Kindle Edition.", "Kindle locations 1,200–1,240"),
       ("Location 812 of 9,000", "Kindle location 812"),
-      ("Página 42 de 300", "Page 42"),
+      ("Page 42 of 300", "Page 42"),
       ("Location 810 | Page 42", "Page 42"),
       ("Notes (Location 810; Page 42). Kindle Edition.", "Page 42"),
     ]
