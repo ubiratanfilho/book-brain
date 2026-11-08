@@ -13,12 +13,29 @@ final class AnswerMarkdownTests: XCTestCase {
     return NSBitmapImageRep(cgImage: try XCTUnwrap(renderer.cgImage))
   }
 
+  private func matches(_ lhs: NSBitmapImageRep, _ rhs: NSBitmapImageRep) throws -> Bool {
+    guard lhs.pixelsWide == rhs.pixelsWide, lhs.pixelsHigh == rhs.pixelsHigh,
+      lhs.bitsPerPixel == rhs.bitsPerPixel
+    else { return false }
+    XCTAssertEqual(lhs.bitsPerSample, 8)
+    XCTAssertEqual(rhs.bitsPerSample, 8)
+    let left = try XCTUnwrap(lhs.bitmapData)
+    let right = try XCTUnwrap(rhs.bitmapData)
+    let rowLength = lhs.pixelsWide * lhs.bitsPerPixel / 8
+    // Equivalent renders can differ by one intensity level at antialiased edges.
+    for y in 0..<lhs.pixelsHigh {
+      let a = left.advanced(by: y * lhs.bytesPerRow)
+      let b = right.advanced(by: y * rhs.bytesPerRow)
+      for i in 0..<rowLength where abs(Int(a[i]) - Int(b[i])) > 1 { return false }
+    }
+    return true
+  }
+
   @MainActor
   func testThirdLevelHeadingHidesMarkersAndHasDistinctTypography() throws {
     let title = "2. Collective outlier"
     let heading = try render("### " + title)
-    XCTAssertEqual(
-      heading.tiffRepresentation, try render("### " + title + " ###").tiffRepresentation)
+    XCTAssertTrue(try matches(heading, render("### " + title + " ###")))
     XCTAssertGreaterThan(heading.pixelsHigh, try render(title).pixelsHigh)
   }
 
@@ -27,8 +44,8 @@ final class AnswerMarkdownTests: XCTestCase {
     let content = "### login → balance inquiry\n  transfer"
     let code = try render("```text\n" + content + "\n```")
     for equivalent in ["~~~\n" + content + "\n~~~", "```text\n" + content] {
-      XCTAssertEqual(code.tiffRepresentation, try render(equivalent).tiffRepresentation)
+      XCTAssertTrue(try matches(code, render(equivalent)))
     }
-    XCTAssertNotEqual(code.tiffRepresentation, try render(content).tiffRepresentation)
+    XCTAssertFalse(try matches(code, render(content)))
   }
 }
