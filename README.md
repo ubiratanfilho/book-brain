@@ -44,6 +44,10 @@ To run the optional integration tests against your authenticated Codex session, 
 
 Format Swift with `swift format format --in-place --recursive Sources Tests Package.swift` and the Python fixture with `python3 -m black Tests/BookBrainCoreTests/Fixtures/fake-codex.py`.
 
+## Report a problem
+
+Include your macOS version, Codex CLI version and the steps that reproduce the problem. For reading or capture issues, use a made-up passage so your books and chat history stay private. [Open a GitHub issue](https://github.com/ubiratanfilho/book-brain/issues/new)
+
 ## License
 
 Book Brain is available under the [MIT License](LICENSE). The app bundle includes license notices for MarkdownUI, NetworkImage and swift-cmark. Book Brain is an independent project by Ubiratan da Motta and has no affiliation with Amazon or OpenAI.
