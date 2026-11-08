@@ -17,6 +17,7 @@ done
 iconutil -c icns "$iconset" -o "$app/Contents/Resources/AppIcon.icns"
 licenses="$app/Contents/Resources/Licenses"
 mkdir -p "$licenses"
+cp LICENSE "$licenses/BookBrain.txt"
 cp .build/checkouts/swift-markdown-ui/LICENSE "$licenses/MarkdownUI.txt"
 cp .build/checkouts/NetworkImage/LICENSE "$licenses/NetworkImage.txt"
 cp .build/checkouts/swift-cmark/COPYING "$licenses/cmark.txt"
