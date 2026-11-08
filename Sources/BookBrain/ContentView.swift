@@ -350,30 +350,30 @@ struct ContentView: View {
   }
 
   private func composer(_ book: Book, compact: Bool) -> some View {
-    VStack(alignment: .leading, spacing: compact ? 4 : 10) {
+    let canSend =
+      model.isConnected && model.isEditable && model.captureIssue == nil
+      && !book.currentChat.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    func send() {
+      guard canSend else { return }
+      Task { await model.send() }
+    }
+
+    return VStack(alignment: .leading, spacing: compact ? 4 : 10) {
       HStack(alignment: .bottom, spacing: 12) {
-        TextField(
-          "What would you like to understand?", text: model.field(\.question), axis: .vertical
-        )
-        .textFieldStyle(.plain).font(.system(size: 14)).lineLimit(compact ? 1...2 : 2...5)
-        .focused($questionFocused).disabled(!model.isEditable)
-        .accessibilityLabel("Your question")
+        QuestionField(text: model.field(\.question), compact: compact, send: send)
+          .focused($questionFocused).disabled(!model.isEditable)
         if model.isBusy {
           Button("Stop", systemImage: "stop.fill") { model.cancel() }
             .buttonStyle(.bordered)
         } else {
-          Button {
-            Task { await model.send() }
-          } label: {
+          Button(action: send) {
             Image(systemName: "arrow.up").font(.system(size: 15, weight: .semibold))
               .frame(width: 32, height: 32)
           }
           .buttonStyle(.borderedProminent).buttonBorderShape(.roundedRectangle(radius: 9))
           .keyboardShortcut(.return, modifiers: .command)
           .accessibilityLabel("Send question")
-          .disabled(
-            !model.isConnected || !model.isEditable || model.captureIssue != nil
-              || book.currentChat.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+          .disabled(!canSend)
         }
       }
       .padding(compact ? 8 : 14).background(Palette.surface, in: RoundedRectangle(cornerRadius: 12))
@@ -386,7 +386,7 @@ struct ContentView: View {
         )
         .fixedSize(horizontal: false, vertical: true)
         Spacer()
-        if !compact { Text("⌘↩ to send").fixedSize() }
+        if !compact { Text("Enter to send · ⇧Enter for a new line").fixedSize() }
       }.font(.system(size: 10)).foregroundStyle(Palette.muted)
     }
     .padding(.horizontal, compact ? 12 : 24).padding(.bottom, compact ? 7 : 20).padding(
@@ -418,7 +418,7 @@ struct ContentView: View {
       Spacer()
       VStack(alignment: .leading, spacing: 10) {
         step("1", "Bring in a Kindle selection", shortcut: "⌘⇧B")
-        step("2", "Send a question", shortcut: "⌘↩")
+        step("2", "Send a question", shortcut: "Enter")
       }
       .padding(18).background(Palette.surface.opacity(0.6), in: RoundedRectangle(cornerRadius: 14))
       Text(
