@@ -37,8 +37,16 @@ extension LibraryStore {
   }
 }
 
-private func openBookPDF(_ url: URL) throws -> PDFDocument {
-  guard let document = PDFDocument(url: url) else {
+func openBookPDF(_ url: URL) throws -> PDFDocument {
+  try validateBookPDF(PDFDocument(url: url))
+}
+
+func openBookPDF(data: Data) throws -> PDFDocument {
+  try validateBookPDF(PDFDocument(data: data))
+}
+
+private func validateBookPDF(_ document: PDFDocument?) throws -> PDFDocument {
+  guard let document else {
     throw BookBrainError.message("Couldn't open this PDF.")
   }
   guard !document.isLocked && document.allowsCopying else {
@@ -69,6 +77,11 @@ public actor BookPDFReader {
       "inputSchema": [
         "type": "object",
         "properties": [
+          "attachment_id": [
+            "type": "string",
+            "description":
+              "For a chat PDF, use its id from chat_attachments. Omit for the book PDF.",
+          ],
           "query": ["type": "string", "minLength": 1, "maxLength": 180],
           "from_page": ["type": "integer", "minimum": 1],
         ],
@@ -82,6 +95,11 @@ public actor BookPDFReader {
       "inputSchema": [
         "type": "object",
         "properties": [
+          "attachment_id": [
+            "type": "string",
+            "description":
+              "For a chat PDF, use its id from chat_attachments. Omit for the book PDF.",
+          ],
           "page": ["type": "integer", "minimum": 1], "image": ["type": "boolean"],
           "offset": ["type": "integer", "minimum": 0],
         ], "required": ["page"], "additionalProperties": false,

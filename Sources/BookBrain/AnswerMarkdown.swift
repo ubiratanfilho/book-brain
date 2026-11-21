@@ -5,7 +5,7 @@ struct AnswerMarkdown: View, Equatable {
   let source: String
 
   var body: some View {
-    Markdown(source)
+    Markdown(AnswerMath.markdown(source))
       .markdownTextStyle(\.text) {
         FontSize(14)
         ForegroundColor(Palette.ink)
@@ -23,9 +23,9 @@ struct AnswerMarkdown: View, Equatable {
           .background(Palette.ink.opacity(0.07), in: RoundedRectangle(cornerRadius: 6))
           .markdownMargin(top: .zero, bottom: .em(1))
       }
-      // Displaying a model response must not fetch remote images.
-      .markdownImageProvider(.asset)
-      .markdownInlineImageProvider(.asset)
+      // These providers render only local math; model responses cannot fetch images.
+      .markdownImageProvider(MathImageProvider())
+      .markdownInlineImageProvider(MathInlineImageProvider())
       .textSelection(.enabled)
       .frame(maxWidth: .infinity, alignment: .leading)
   }

@@ -19,4 +19,6 @@ jobs:
       - name: Run tests without live inference
         run: swift test
       - name: Build the application
+        env:
+          CODE_SIGN_IDENTITY: "-"
         run: ./scripts/build-app.sh

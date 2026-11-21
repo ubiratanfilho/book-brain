@@ -7,12 +7,31 @@ public struct Exchange: Codable, Identifiable, Equatable {
   public var excerpt: String
   public var location: String
   public var answer: String
+  public var attachments: [ChatAttachment]
 
-  public init(question: String, excerpt: String, location: String, answer: String) {
+  public init(
+    question: String, excerpt: String, location: String, answer: String,
+    attachments: [ChatAttachment] = []
+  ) {
     self.question = question
     self.excerpt = excerpt
     self.location = location
     self.answer = answer
+    self.attachments = attachments
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case id, date, question, excerpt, location, answer, attachments
+  }
+  public init(from decoder: Decoder) throws {
+    let fields = try decoder.container(keyedBy: CodingKeys.self)
+    id = try fields.decode(UUID.self, forKey: .id)
+    date = try fields.decode(Date.self, forKey: .date)
+    question = try fields.decode(String.self, forKey: .question)
+    excerpt = try fields.decode(String.self, forKey: .excerpt)
+    location = try fields.decode(String.self, forKey: .location)
+    answer = try fields.decode(String.self, forKey: .answer)
+    attachments = try fields.decodeIfPresent([ChatAttachment].self, forKey: .attachments) ?? []
   }
 }
 
@@ -25,12 +44,39 @@ public struct ReadingChat: Codable, Identifiable, Equatable {
   public var excerpt = ""
   public var question = ""
   public var exchanges: [Exchange] = []
+  public var attachments: [ChatAttachment] = []
+  public var hasAttachmentTools = true
 
   public init() {}
 
+  public var allAttachments: [ChatAttachment] { exchanges.flatMap(\.attachments) + attachments }
+  public var questionForSending: String {
+    question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !attachments.isEmpty
+      ? "Help me understand the attached files." : question
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case id, createdAt, customTitle, threadID, location, excerpt, question, exchanges, attachments,
+      hasAttachmentTools
+  }
+  public init(from decoder: Decoder) throws {
+    let fields = try decoder.container(keyedBy: CodingKeys.self)
+    id = try fields.decode(UUID.self, forKey: .id)
+    createdAt = try fields.decode(Date.self, forKey: .createdAt)
+    customTitle = try fields.decode(String.self, forKey: .customTitle)
+    threadID = try fields.decodeIfPresent(String.self, forKey: .threadID)
+    location = try fields.decode(String.self, forKey: .location)
+    excerpt = try fields.decode(String.self, forKey: .excerpt)
+    question = try fields.decode(String.self, forKey: .question)
+    exchanges = try fields.decode([Exchange].self, forKey: .exchanges)
+    attachments = try fields.decodeIfPresent([ChatAttachment].self, forKey: .attachments) ?? []
+    hasAttachmentTools = try fields.decodeIfPresent(Bool.self, forKey: .hasAttachmentTools) ?? false
+  }
+
   public var title: String {
     if !customTitle.isEmpty { return customTitle }
-    for text in [exchanges.first?.question ?? "", question, excerpt] {
+    for text in [exchanges.first?.question ?? "", question, excerpt, attachments.first?.name ?? ""]
+    {
       let line = text.split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
       if !line.isEmpty { return line.count > 64 ? String(line.prefix(63)) + "…" : line }
     }
@@ -38,7 +84,8 @@ public struct ReadingChat: Codable, Identifiable, Equatable {
   }
 
   public var isBlank: Bool {
-    exchanges.isEmpty && question.isEmpty && excerpt.isEmpty && location.isEmpty
+    exchanges.isEmpty && attachments.isEmpty && question.isEmpty && excerpt.isEmpty
+      && location.isEmpty
       && customTitle.isEmpty
   }
 }

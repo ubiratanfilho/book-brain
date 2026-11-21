@@ -11,7 +11,6 @@ struct ContentView: View {
   @State private var editingCompactExcerpt = false
   @State private var showChats = false
   @AppStorage("readingAppearance") private var appearance = ReadingAppearance.system
-  @FocusState private var questionFocused: Bool
 
   var body: some View {
     GeometryReader { geometry in
@@ -76,10 +75,9 @@ struct ContentView: View {
       Button("Cancel", role: .cancel) {}
       Button("Delete", role: .destructive) { model.deleteSelectedBook() }
     } message: {
-      Text("This will remove the book's chat history and its saved PDF from Book Brain.")
+      Text("This will remove the book's chats, attachments, and saved PDF from Book Brain.")
     }
     .onChange(of: appearance, initial: true) { _, mode in NSApp.appearance = mode.appAppearance }
-    .onChange(of: model.focusQuestion) { _, _ in questionFocused = true }
   }
 
   @ViewBuilder private var notices: some View {
@@ -306,6 +304,11 @@ struct ContentView: View {
           ForEach(book.currentChat.exchanges) { exchange in
             VStack(alignment: .leading, spacing: 14) {
               questionBubble(exchange.question)
+              if !exchange.attachments.isEmpty {
+                AttachmentStrip(
+                  attachments: exchange.attachments, store: model.store, bookID: book.id,
+                  chatID: book.currentChat.id)
+              }
               if !exchange.excerpt.isEmpty {
                 DisclosureGroup("Show passage for this question") {
                   Text(exchange.excerpt).font(.system(size: 12, design: .serif))
@@ -318,6 +321,11 @@ struct ContentView: View {
           }
           if model.isBusy {
             questionBubble(model.pendingQuestion)
+            if !model.pendingAttachments.isEmpty {
+              AttachmentStrip(
+                attachments: model.pendingAttachments, store: model.store, bookID: book.id,
+                chatID: book.currentChat.id)
+            }
             if model.streamingAnswer.isEmpty {
               HStack(spacing: 10) {
                 ProgressView().controlSize(.small)
@@ -352,16 +360,34 @@ struct ContentView: View {
   private func composer(_ book: Book, compact: Bool) -> some View {
     let canSend =
       model.isConnected && model.isEditable && model.captureIssue == nil
-      && !book.currentChat.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      && !book.currentChat.questionForSending.trimmingCharacters(in: .whitespacesAndNewlines)
+        .isEmpty
     func send() {
       guard canSend else { return }
       Task { await model.send() }
     }
 
     return VStack(alignment: .leading, spacing: compact ? 4 : 10) {
-      HStack(alignment: .bottom, spacing: 12) {
-        QuestionField(text: model.field(\.question), compact: compact, send: send)
-          .focused($questionFocused).disabled(!model.isEditable)
+      if !book.currentChat.attachments.isEmpty {
+        AttachmentStrip(
+          attachments: book.currentChat.attachments, store: model.store, bookID: book.id,
+          chatID: book.currentChat.id, remove: model.removeAttachment
+        )
+        .disabled(!model.isEditable)
+      }
+      HStack(alignment: .center, spacing: 12) {
+        Button {
+          model.chooseAttachments()
+        } label: {
+          Image(systemName: "paperclip").font(.system(size: 16)).frame(width: 24, height: 30)
+        }.buttonStyle(.plain).disabled(!model.isEditable)
+          .accessibilityLabel("Attach files").help("Attach images, PDFs, or text files")
+        QuestionField(
+          text: model.field(\.question), compact: compact,
+          focusRequest: model.focusQuestion, send: send, attach: model.addAttachments
+        )
+        .disabled(!model.isEditable)
+        if model.isImporting { ProgressView().controlSize(.small) }
         if model.isBusy {
           Button("Stop", systemImage: "stop.fill") { model.cancel() }
             .buttonStyle(.bordered)
@@ -376,7 +402,8 @@ struct ContentView: View {
           .disabled(!canSend)
         }
       }
-      .padding(compact ? 8 : 14).background(Palette.surface, in: RoundedRectangle(cornerRadius: 12))
+      .padding(.horizontal, compact ? 8 : 14).padding(.vertical, 8)
+      .background(Palette.surface, in: RoundedRectangle(cornerRadius: 12))
       .overlay { RoundedRectangle(cornerRadius: 12).stroke(Palette.line, lineWidth: 1) }
       HStack(alignment: .top) {
         Text(
@@ -388,6 +415,8 @@ struct ContentView: View {
         Spacer()
         if !compact { Text("Enter to send · ⇧Enter for a new line").fixedSize() }
       }.font(.system(size: 10)).foregroundStyle(Palette.muted)
+      Text("⌘V to paste a screenshot · Up to 8 files · Sent with your message")
+        .font(.system(size: 10)).foregroundStyle(Palette.muted)
     }
     .padding(.horizontal, compact ? 12 : 24).padding(.bottom, compact ? 7 : 20).padding(
       .top, compact ? 6 : 12
@@ -431,7 +460,7 @@ struct ContentView: View {
   private func suggestion(_ text: String, icon: String) -> some View {
     Button {
       model.field(\.question).wrappedValue = text
-      questionFocused = true
+      model.focusQuestion += 1
     } label: {
       Label(text, systemImage: icon).font(.system(size: 12))
         .padding(.horizontal, 12).padding(.vertical, 8)

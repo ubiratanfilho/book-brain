@@ -6,6 +6,10 @@ enum BookBrainApp {
   @MainActor
   static func main() {
     let application = NSApplication.shared
+    if CommandLine.arguments.contains("--check-kindle-capture-access") {
+      print("Kindle capture access: \(CGPreflightPostEventAccess() ? "allowed" : "denied")")
+      return
+    }
     let delegate = AppDelegate()
     application.delegate = delegate
     withExtendedLifetime(delegate) { application.run() }
@@ -33,7 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     window.backgroundColor = NSColor(Palette.paper)
     window.minSize = NSSize(width: 300, height: 280)
     window.level = .floating
-    window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
+    window.collectionBehavior = [.fullScreenAuxiliary]
     window.isReleasedWhenClosed = false
     window.delegate = self
     NSWorkspace.shared.notificationCenter.addObserver(
@@ -111,13 +115,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
   @objc private func showWindow() {
     NSApp.activate(ignoringOtherApps: true)
     window.makeKeyAndOrderFront(nil)
-    if let screen = readingScreen, !screen.visibleFrame.contains(window.frame) {
-      fitWindow(size: window.frame.size, in: screen.visibleFrame)
-    }
   }
 
   private func resizeWindow(compact: Bool) {
-    guard let visible = (readingScreen ?? window.screen)?.visibleFrame else { return }
+    guard let visible = window.screen?.visibleFrame else { return }
     if compact { expandedSize = window.frame.size }
     let requested = compact ? NSSize(width: 350, height: 390) : expandedSize
     fitWindow(size: requested, in: visible)
@@ -130,27 +131,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     let x = min(max(previous.maxX - width, visible.minX), visible.maxX - width)
     let y = min(max(previous.maxY - height, visible.minY), visible.maxY - height)
     window.setFrame(NSRect(x: x, y: y, width: width, height: height), display: true)
-  }
-
-  private func identifier(of screen: NSScreen) -> String? {
-    guard let number = screen.deviceDescription[.init("NSScreenNumber")] as? NSNumber,
-      let uuid = CGDisplayCreateUUIDFromDisplayID(number.uint32Value)?.takeRetainedValue()
-    else { return nil }
-    return CFUUIDCreateString(nil, uuid) as String
-  }
-
-  private var readingScreen: NSScreen? {
-    guard let id = UserDefaults.standard.string(forKey: "ReadingDisplayUUID") else { return nil }
-    return NSScreen.screens.first { identifier(of: $0) == id }
-  }
-
-  func windowDidMove(_ notification: Notification) {
-    // AppKit can move a restored window during activation. Only a user's drag
-    // changes the selected display; programmatic resizes preserve that choice.
-    guard NSApp.currentEvent?.type == .leftMouseDragged, let screen = window.screen,
-      let id = identifier(of: screen)
-    else { return }
-    UserDefaults.standard.set(id, forKey: "ReadingDisplayUUID")
   }
 
   @objc private func pasteFromMenu() {
