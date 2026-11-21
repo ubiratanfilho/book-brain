@@ -20,6 +20,15 @@ public final class PassageClipboard {
     return previousGeneration != pasteboard.changeCount
   }
 
+  public func copyAnswer(_ source: String) throws {
+    pasteboard.clearContents()
+    guard pasteboard.setString(source, forType: .string) else {
+      throw BookBrainError.message("Couldn't copy the answer. Try again.")
+    }
+    // A copy made by Book Brain is not a new Kindle passage.
+    previousGeneration = pasteboard.changeCount
+  }
+
   public func readNewExcerpt(copySelection: (() throws -> Void)? = nil) async throws -> String {
     if let copySelection {
       previousGeneration = pasteboard.changeCount

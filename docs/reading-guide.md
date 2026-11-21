@@ -35,6 +35,8 @@ Book Brain looks for `codex` on your PATH, in the ChatGPT and Codex app bundles,
 
 ## Reading with Codex
 
+Use **Copy raw** beside a response to copy its original text, including Markdown, LaTeX and code fences. During streaming, it copies the text received so far.
+
 Answers stream into the chat. You can stop a reply and reconnect. Book Brain keeps your draft after an error or cancellation and saves only completed exchanges. Each exchange includes the passage you sent with the question. The first question names the chat until you rename it.
 
 Equations in answers render locally, including in saved conversations. Inline math accepts `\(...\)` or `$...$`; display equations accept `\[...\]` or `$$...$$`. Named operators such as `\operatorname{Var}(X)` and display results wrapped in `\boxed{...}` are supported. Expressions such as integrals annotated with `\underbrace` use a bundled offline MathJax renderer. Wide equations scroll horizontally in compact windows. Unsupported LaTeX remains visible as source text, and code blocks keep their literal contents.
