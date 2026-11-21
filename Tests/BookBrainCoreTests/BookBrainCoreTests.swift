@@ -24,6 +24,8 @@ final class LibraryTests: XCTestCase {
     ]
     try JSONSerialization.data(withJSONObject: old).write(to: store.file)
     var library = try store.load()
+    library.books[0].currentChat.codexModel = "standard-model"
+    library.books[0].currentChat.codexFast = false
     let originalChat = library.books[0].currentChat
     XCTAssertEqual(originalChat.exchanges, [exchange])
     XCTAssertEqual(originalChat.location, "p. 3")
@@ -33,6 +35,8 @@ final class LibraryTests: XCTestCase {
     XCTAssertNil(originalChat.threadID)
     library.books[0].newChat()
     XCTAssertTrue(library.books[0].currentChat.isBlank)
+    XCTAssertEqual(library.books[0].currentChat.codexModel, "standard-model")
+    XCTAssertFalse(library.books[0].currentChat.codexFast)
     library.books[0].currentChat.excerpt = "Another passage"
     library.books[0].currentChat.question = "Another question"
     library.books[0].currentChat.threadID = "thread-b"
@@ -187,6 +191,25 @@ final class CodexClientTests: XCTestCase {
     XCTAssertEqual(second.threadID, answer.threadID)
     let fresh = try await client.ask(prompt: prompt("OK"), threadID: nil) { _ in }
     XCTAssertNotEqual(fresh.threadID, answer.threadID)
+  }
+
+  func testChangeModelAndFastModeWithinOneThread() async throws {
+    let client = try client()
+    defer { client.disconnect() }
+    try await client.connect()
+    XCTAssertEqual(client.models.map(\.model), ["gpt-6.1-terra", "standard-model"])
+    let first = try await client.ask(prompt: prompt("OK"), threadID: nil) { _ in }
+    for (question, model, fast) in [
+      ("FAST_OFF", "gpt-6.1-terra", false),
+      ("STANDARD_MODEL", "standard-model", true),
+      ("OK", "gpt-6.1-terra", true),
+    ] {
+      let reply = try await client.ask(
+        prompt: prompt(question), threadID: first.threadID,
+        modelID: model, fast: fast
+      ) { _ in }
+      XCTAssertEqual(reply.threadID, first.threadID)
+    }
   }
 
   func testFailureEmptyAnswerAndMalformedProtocol() async throws {

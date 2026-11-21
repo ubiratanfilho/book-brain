@@ -44,6 +44,23 @@ for line in sys.stdin:
         result = {"userAgent": "fake-codex"}
     elif method == "account/read":
         result = {"account": {"type": "chatgpt"}, "requiresOpenaiAuth": True}
+    elif method == "model/list":
+        second_page = params.get("cursor") == "second"
+        model = "standard-model" if second_page else "gpt-6.1-terra"
+        effort = "medium" if second_page else "xhigh"
+        result = {
+            "data": [
+                {
+                    "model": model,
+                    "displayName": model,
+                    "isDefault": not second_page,
+                    "serviceTiers": [] if second_page else [{"id": "priority"}],
+                    "defaultReasoningEffort": effort,
+                    "supportedReasoningEfforts": [{"reasoningEffort": effort}],
+                }
+            ],
+            "nextCursor": None if second_page else "second",
+        }
     elif method == "config/read":
         result = {"config": {"mcp_servers": {"private_server": {"enabled": True}}}}
     elif method in ("thread/start", "thread/resume"):
@@ -53,9 +70,11 @@ for line in sys.stdin:
         else:
             thread_id = params["threadId"]
             assert params["excludeTurns"] is True
-        assert params["model"] == "gpt-6.1-terra"
-        assert params["config"]["model_reasoning_effort"] == "xhigh"
-        assert params["serviceTier"] == "priority"
+        selected = (
+            params["model"],
+            params["serviceTier"],
+            params["config"]["model_reasoning_effort"],
+        )
         assert not params.get("ephemeral", False)
         assert params["approvalPolicy"] == "never"
         assert params["permissions"] == "book-brain"
@@ -69,6 +88,12 @@ for line in sys.stdin:
         assert params["permissions"] == "book-brain"
         prompt = json.loads(params["input"][0]["text"])
         question = prompt["current_question"]
+        expected = {
+            "STANDARD_MODEL": ("standard-model", None, "medium"),
+            "FAST_OFF": ("gpt-6.1-terra", None, "xhigh"),
+        }.get(question, ("gpt-6.1-terra", "priority", "xhigh"))
+        assert selected == expected
+        assert (params["model"], params["serviceTier"], params["effort"]) == expected
         if question == "ATTACHMENTS":
             images = [item for item in params["input"] if item["type"] == "image"]
             assert len(images) == 1

@@ -10,3 +10,4 @@ work/
 scripts/mathjax/node_modules/
 library.json
 *.pdf
+scripts/pi/node_modules/

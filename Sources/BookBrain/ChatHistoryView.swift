@@ -90,7 +90,7 @@ struct ChatHistoryView: View {
           Button("Delete", role: .destructive) { model.changeChat { $0.deleteChat(chat.id) } }
         } message: { chat in
           Text(
-            "“\(chat.title)” and its saved attachments will be removed from this Mac's library. Codex keeps its own history and memories."
+            "“\(chat.title)” and its saved attachments will be removed from this Mac's library. This only deletes the local copy."
           )
         }
     }

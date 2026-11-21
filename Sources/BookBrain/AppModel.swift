@@ -23,13 +23,14 @@ final class AppModel: ObservableObject {
   @Published var answerStatus = ""
   @Published var pendingQuestion = ""
   @Published var pendingAttachments: [ChatAttachment] = []
-  @Published var modelName = ""
+  @Published private(set) var codexModels: [CodexModel] = []
   @Published var showNewBook = false
   @Published var floating = true
   @Published var focusQuestion = 0
 
   let store: LibraryStore
   let clipboard = PassageClipboard(.general)
+  private var apiClient: PiClient?
   private var client: CodexClient?
   private var saveTask: Task<Void, Never>?
   private var canSave = false
@@ -43,6 +44,7 @@ final class AppModel: ObservableObject {
           .appendingPathComponent("BookBrain", isDirectory: true))
     self.client = client
     isConnected = client?.isConnected == true
+    codexModels = client?.models ?? []
     library = Library()
     do {
       library = try self.store.load()
@@ -57,6 +59,48 @@ final class AppModel: ObservableObject {
   }
 
   var selectedBook: Book? { library.books.first { $0.id == library.selectedBookID } }
+  var apiModel: APIModel? { selectedBook?.currentChat.apiModel }
+  var readyToSend: Bool { apiModel != nil || isConnected }
+  var canChangeProvider: Bool { selectedBook?.currentChat.exchanges.isEmpty == true && isEditable }
+
+  var codexModelID: String {
+    selectedBook?.currentChat.codexModel ?? client?.defaultModel?.model ?? ""
+  }
+  var codexSupportsFast: Bool {
+    codexModels.first { $0.model == codexModelID }?.supportsFast == true
+  }
+
+  func configureCodex(modelID: String, fast: Bool) {
+    guard apiModel == nil, isConnected, isEditable,
+      codexModels.contains(where: { $0.model == modelID }),
+      let index = library.books.firstIndex(where: { $0.id == library.selectedBookID })
+    else { return }
+    var next = library
+    next.books[index].currentChat.codexModel = modelID
+    next.books[index].currentChat.codexFast = fast
+    do { try commitLibrary(next) } catch { notice = error.localizedDescription }
+  }
+
+  func configureAPI(_ model: APIModel?, newKey: String) throws {
+    guard isEditable,
+      let index = library.books.firstIndex(where: { $0.id == library.selectedBookID }),
+      canChangeProvider || (apiModel?.provider == model?.provider && apiModel?.id == model?.id)
+    else {
+      throw BookBrainError.message("Start a new chat to change the provider or model.")
+    }
+    if let model {
+      if newKey.isEmpty {
+        _ = try APIKeyStore.key(for: model.provider)
+      } else {
+        try APIKeyStore.save(newKey, for: model.provider)
+      }
+    }
+    var next = library
+    next.books[index].currentChat.apiModel = model
+    try commitLibrary(next)
+    notice = nil
+  }
+
   var isEditable: Bool { canSave && !isBusy && !isImporting }
 
   func field(_ keyPath: WritableKeyPath<ReadingChat, String>) -> Binding<String> {
@@ -232,7 +276,7 @@ final class AppModel: ObservableObject {
   }
 
   func connect() async {
-    guard !isConnecting, !isBusy else { return }
+    guard apiModel == nil, !isConnecting, !isBusy else { return }
     isConnecting = true
     isConnected = false
     notice = nil
@@ -241,7 +285,8 @@ final class AppModel: ObservableObject {
     let savedPath = UserDefaults.standard.string(forKey: "codexExecutable")
     let executable = savedPath.map { URL(fileURLWithPath: $0) } ?? CodexClient.findExecutable()
     guard let executable else {
-      notice = "Couldn't find Codex. Install it or choose its executable from the Codex menu."
+      notice =
+        "Couldn't find Codex. Choose an API key for a new chat or locate the Codex executable in the connection menu."
       return
     }
     let connection = CodexClient(executable: executable)
@@ -249,8 +294,8 @@ final class AppModel: ObservableObject {
     do {
       try await connection.connect()
       isConnected = true
-      modelName = connection.model
-    } catch { notice = error.localizedDescription }
+      codexModels = connection.models
+    } catch { if apiModel == nil { notice = error.localizedDescription } }
   }
 
   func chooseExecutable() {
@@ -359,7 +404,7 @@ final class AppModel: ObservableObject {
   }
 
   func send() async {
-    guard isEditable, captureIssue == nil, isConnected, let client, var snapshot = selectedBook
+    guard isEditable, captureIssue == nil, readyToSend, var snapshot = selectedBook
     else { return }
     // Older Codex threads cannot acquire new dynamic tool schemas on resume.
     if !snapshot.currentChat.hasAttachmentTools && !snapshot.currentChat.attachments.isEmpty {
@@ -368,6 +413,12 @@ final class AppModel: ObservableObject {
     let prompt: String
     let attachmentInputs: [[String: Any]]
     do {
+      if let model = snapshot.currentChat.apiModel, !model.vision,
+        snapshot.currentChat.attachments.contains(where: { $0.kind == .image })
+      {
+        throw BookBrainError.message(
+          "This model accepts text only. Use a chat with an image-capable model for screenshots.")
+      }
       prompt = try ReadingPrompt.make(book: snapshot)
       attachmentInputs = try store.attachmentInputs(
         snapshot.currentChat.attachments, bookID: snapshot.id, chatID: snapshot.currentChat.id)
@@ -387,7 +438,8 @@ final class AppModel: ObservableObject {
       pendingQuestion = ""
       pendingAttachments = []
       streamingAnswer = ""
-      isConnected = client.isConnected
+      apiClient = nil
+      isConnected = client?.isConnected == true
     }
     do {
       let reader = snapshot.pdf.map { _ in BookPDFReader(file: store.pdfURL(for: snapshot.id)) }
@@ -399,11 +451,35 @@ final class AppModel: ObservableObject {
               file: store.attachmentURL($0, bookID: snapshot.id, chatID: snapshot.currentChat.id))
           )
         })
-      let answer = try await client.ask(
-        prompt: prompt, threadID: snapshot.currentChat.threadID, pdf: reader,
-        attachmentInputs: attachmentInputs, pdfAttachments: pdfAttachments,
-        onLookup: { [weak self] in self?.answerStatus = $0 },
-        onUpdate: { [weak self] text in self?.streamingAnswer = text })
+      let answer: (text: String, threadID: String?)
+      if let model = snapshot.currentChat.apiModel {
+        guard let executable = Bundle.main.url(forAuxiliaryExecutable: "BookBrainPi") else {
+          throw BookBrainError.message("Build and open Book Brain.app to use API mode.")
+        }
+        let key = try APIKeyStore.key(for: model.provider)
+        let pi = PiClient(executable: executable)
+        apiClient = pi
+        let references =
+          reader == nil && pdfAttachments.isEmpty
+          ? nil : PDFReferences(book: reader, attachments: pdfAttachments)
+        let text = try await pi.ask(
+          model: model, key: key, prompt: prompt, inputs: attachmentInputs, pdf: references,
+          onLookup: { self.answerStatus = "Reading the PDF…" },
+          onUpdate: { self.streamingAnswer = $0 })
+        answer = (text, nil)
+      } else {
+        guard let client else {
+          throw BookBrainError.message("Connect to Codex to send a question.")
+        }
+        let reply = try await client.ask(
+          prompt: prompt, threadID: snapshot.currentChat.threadID,
+          modelID: snapshot.currentChat.codexModel,
+          fast: snapshot.currentChat.codexFast, pdf: reader,
+          attachmentInputs: attachmentInputs, pdfAttachments: pdfAttachments,
+          onLookup: { [weak self] in self?.answerStatus = $0 },
+          onUpdate: { [weak self] text in self?.streamingAnswer = text })
+        answer = (reply.text, reply.threadID)
+      }
       guard let index = library.books.firstIndex(where: { $0.id == snapshot.id }),
         library.books[index].currentChat.id == snapshot.currentChat.id
       else { return }
@@ -428,6 +504,10 @@ final class AppModel: ObservableObject {
   }
 
   func cancel() {
+    if let apiClient {
+      apiClient.cancel()
+      return
+    }
     client?.disconnect()
     isConnected = false
   }
@@ -445,6 +525,7 @@ final class AppModel: ObservableObject {
 
   func shutdown() {
     saveNow()
+    apiClient?.cancel()
     client?.disconnect()
   }
 

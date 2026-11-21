@@ -9,6 +9,7 @@ struct ContentView: View {
   @State private var editingBook: Book?
   @State private var confirmDelete = false
   @State private var editingCompactExcerpt = false
+  @State private var showAPISettings = false
   @State private var showChats = false
   @AppStorage("readingAppearance") private var appearance = ReadingAppearance.system
 
@@ -61,6 +62,10 @@ struct ContentView: View {
         BookDetailsForm(model: model, book: book).frame(
           width: min(420, geometry.size.width), height: min(350, geometry.size.height))
       }
+      .sheet(isPresented: $showAPISettings) {
+        APISettings(model: model)
+          .frame(width: min(420, geometry.size.width), height: min(345, geometry.size.height))
+      }
       .sheet(isPresented: $showChats) {
         ChatHistoryView(model: model)
           .frame(width: min(450, geometry.size.width), height: min(430, geometry.size.height))
@@ -97,25 +102,66 @@ struct ContentView: View {
       Text("book brain").font(.system(size: 20, weight: .semibold, design: .serif))
       Spacer()
       Menu {
-        Button(model.isConnected ? "Reconnect to Codex" : "Connect to Codex") {
-          Task { await model.connect() }
+        if model.selectedBook != nil {
+          Button(model.apiModel == nil ? "Use an API key…" : "API settings…") {
+            showAPISettings = true
+          }
+          .disabled(model.apiModel == nil && !model.canChangeProvider)
+          if let api = model.apiModel {
+            Text(api.id)
+            Button("Use Codex") {
+              do {
+                try model.configureAPI(nil, newKey: "")
+                if !model.isConnected { Task { await model.connect() } }
+              } catch { model.notice = error.localizedDescription }
+            }.disabled(!model.canChangeProvider)
+          }
+          if !model.canChangeProvider { Text("Start a new chat to change providers.") }
         }
-        Button("Locate Codex executable…") { model.chooseExecutable() }
-        if !model.modelName.isEmpty { Text(model.modelName) }
+        if model.apiModel == nil {
+          Button(model.isConnected ? "Reconnect to Codex" : "Connect to Codex") {
+            Task { await model.connect() }
+          }
+          Button("Locate Codex executable…") { model.chooseExecutable() }
+          if let chat = model.selectedBook?.currentChat, model.isConnected {
+            Divider()
+            Picker(
+              "Model",
+              selection: Binding(
+                get: { model.codexModelID },
+                set: {
+                  model.configureCodex(modelID: $0, fast: chat.codexFast)
+                })
+            ) {
+              ForEach(model.codexModels, id: \.model) { item in
+                Text(item.displayName).tag(item.model)
+              }
+            }.pickerStyle(.menu)
+            Toggle(
+              "Fast mode",
+              isOn: Binding(
+                get: { model.codexSupportsFast && chat.codexFast },
+                set: {
+                  model.configureCodex(modelID: model.codexModelID, fast: $0)
+                })
+            ).disabled(!model.codexSupportsFast)
+          }
+        }
       } label: {
         HStack(spacing: 6) {
-          Circle().fill(model.isConnected ? Palette.green : .orange).frame(width: 6, height: 6)
+          Circle().fill(model.readyToSend ? Palette.green : .orange).frame(width: 6, height: 6)
           Text(
-            compact
-              ? "Codex"
-              : (model.isConnecting
-                ? "Connecting…" : model.isConnected ? "Codex connected" : "Connect to Codex")
+            model.apiModel?.provider.name
+              ?? (compact
+                ? "Codex"
+                : (model.isConnecting
+                  ? "Connecting…" : model.isConnected ? "Codex connected" : "Connect to Codex"))
           )
           .font(.system(size: 11, weight: .medium))
         }
       }
       .menuStyle(.borderlessButton).fixedSize()
-      .disabled(model.isConnecting || model.isBusy)
+      .disabled(model.isBusy || model.isImporting)
       Menu {
         Picker("Appearance", selection: $appearance) {
           ForEach(ReadingAppearance.allCases, id: \.self) { mode in
@@ -359,7 +405,7 @@ struct ContentView: View {
 
   private func composer(_ book: Book, compact: Bool) -> some View {
     let canSend =
-      model.isConnected && model.isEditable && model.captureIssue == nil
+      model.readyToSend && model.isEditable && model.captureIssue == nil
       && !book.currentChat.questionForSending.trimmingCharacters(in: .whitespacesAndNewlines)
         .isEmpty
     func send() {
@@ -451,7 +497,7 @@ struct ContentView: View {
       }
       .padding(18).background(Palette.surface.opacity(0.6), in: RoundedRectangle(cornerRadius: 14))
       Text(
-        "Your chats are saved on this Mac. When you ask a question, Codex can use your memories and learn from the chat."
+        "Chats are saved on this Mac. After adding a book, choose Codex or use your own API key in the connection menu."
       )
       .font(.system(size: 11)).foregroundStyle(Palette.muted).lineSpacing(3)
     }.padding(32)

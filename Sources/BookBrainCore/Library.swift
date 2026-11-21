@@ -39,6 +39,9 @@ public struct ReadingChat: Codable, Identifiable, Equatable {
   public var id = UUID()
   public var createdAt = Date()
   public var customTitle = ""
+  public var codexModel: String?
+  public var codexFast = true
+  public var apiModel: APIModel?
   public var threadID: String?
   public var location = ""
   public var excerpt = ""
@@ -56,7 +59,9 @@ public struct ReadingChat: Codable, Identifiable, Equatable {
   }
 
   private enum CodingKeys: String, CodingKey {
-    case id, createdAt, customTitle, threadID, location, excerpt, question, exchanges, attachments,
+    case id, createdAt, customTitle, threadID, apiModel, codexModel, codexFast, location, excerpt,
+      question, exchanges,
+      attachments,
       hasAttachmentTools
   }
   public init(from decoder: Decoder) throws {
@@ -64,6 +69,9 @@ public struct ReadingChat: Codable, Identifiable, Equatable {
     id = try fields.decode(UUID.self, forKey: .id)
     createdAt = try fields.decode(Date.self, forKey: .createdAt)
     customTitle = try fields.decode(String.self, forKey: .customTitle)
+    codexModel = try fields.decodeIfPresent(String.self, forKey: .codexModel)
+    codexFast = try fields.decodeIfPresent(Bool.self, forKey: .codexFast) ?? true
+    apiModel = try fields.decodeIfPresent(APIModel.self, forKey: .apiModel)
     threadID = try fields.decodeIfPresent(String.self, forKey: .threadID)
     location = try fields.decode(String.self, forKey: .location)
     excerpt = try fields.decode(String.self, forKey: .excerpt)
@@ -105,8 +113,12 @@ public struct Book: Codable, Identifiable, Equatable {
 
   public mutating func newChat() {
     guard !currentChat.isBlank else { return }
-    savedChats.insert(currentChat, at: 0)
+    let previous = currentChat
+    savedChats.insert(previous, at: 0)
     currentChat = ReadingChat()
+    currentChat.apiModel = previous.apiModel
+    currentChat.codexModel = previous.codexModel
+    currentChat.codexFast = previous.codexFast
   }
 
   public mutating func openChat(_ id: UUID) {

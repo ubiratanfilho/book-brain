@@ -1,8 +1,29 @@
 import Foundation
 
+public struct CodexModel: Decodable {
+  public let model: String
+  public let displayName: String
+  let isDefault: Bool
+  let defaultReasoningEffort: String
+  private let supportedReasoningEfforts: [Effort]
+  private let serviceTiers: [Tier]?
+
+  private struct Effort: Decodable { let reasoningEffort: String }
+  private struct Tier: Decodable { let id: String }
+
+  public var supportsFast: Bool { serviceTiers?.contains { $0.id == "priority" } == true }
+  var effort: String {
+    supportedReasoningEfforts.contains { $0.reasoningEffort == "xhigh" }
+      ? "xhigh" : defaultReasoningEffort
+  }
+}
+
 @MainActor
 public final class CodexClient {
-  public let model = "gpt-6.1-terra"
+  public private(set) var models: [CodexModel] = []
+  public var defaultModel: CodexModel? {
+    models.first { $0.model == "gpt-6.1-terra" } ?? models.first(where: \.isDefault) ?? models.first
+  }
   public private(set) var isConnected = false
 
   private let executable: URL
@@ -136,13 +157,14 @@ public final class CodexClient {
       guard let values = config["config"] as? [String: Any] else {
         throw BookBrainError.message("Couldn't verify the Codex settings.")
       }
-      threadConfig = ["model_reasoning_effort": "xhigh"]
+      threadConfig = [:]
       if let servers = values["mcp_servers"] as? [String: Any] {
         threadConfig["mcp_servers"] = Dictionary(
           uniqueKeysWithValues: servers.keys.map {
             ($0, ["enabled": false])
           })
       }
+      models = try await loadModels()
       isConnected = true
     } catch {
       stop(error: error)
@@ -150,16 +172,36 @@ public final class CodexClient {
     }
   }
 
-  private func loadThread(_ savedID: String?, in directory: URL) async throws
+  private func loadModels() async throws -> [CodexModel] {
+    var models: [CodexModel] = []
+    var params: [String: Any] = ["includeHidden": false]
+    repeat {
+      let page = try await request("model/list", params)
+      guard let data = page["data"] as? [[String: Any]] else {
+        throw BookBrainError.message("Codex returned an invalid model list.")
+      }
+      models += try JSONDecoder().decode(
+        [CodexModel].self, from: JSONSerialization.data(withJSONObject: data))
+      params["cursor"] = page["nextCursor"] as? String
+    } while params["cursor"] != nil
+    guard !models.isEmpty else {
+      throw BookBrainError.message("No Codex models are available for this account.")
+    }
+    return models
+  }
+
+  private func loadThread(_ savedID: String?, in directory: URL, model: CodexModel, tier: Any)
+    async throws
     -> String
   {
     var params: [String: Any] = [
-      "model": model, "serviceTier": "priority", "cwd": directory.path,
+      "model": model.model, "serviceTier": tier, "cwd": directory.path,
       "approvalPolicy": "never", "permissions": "book-brain",
       "baseInstructions": ReadingPrompt.instructions,
       "developerInstructions":
         "Use only hosted web search and the approved PDF tools as directed by the reading instructions.",
-      "config": threadConfig,
+      "config": threadConfig.merging(["model_reasoning_effort": model.effort]) { _, value in value
+      },
     ]
     if let savedID {
       params["threadId"] = savedID
@@ -193,7 +235,8 @@ public final class CodexClient {
   }
 
   public func ask(
-    prompt: String, threadID: String?, pdf: BookPDFReader? = nil,
+    prompt: String, threadID: String?, modelID: String? = nil, fast: Bool = true,
+    pdf: BookPDFReader? = nil,
     attachmentInputs: [[String: Any]] = [], pdfAttachments: [String: BookPDFReader] = [:],
     onLookup: ((String) -> Void)? = nil,
     onUpdate: @escaping (String) -> Void
@@ -206,7 +249,13 @@ public final class CodexClient {
     guard !asking else { throw BookBrainError.message("Wait for the current reply to finish.") }
     asking = true
     defer { asking = false }
-    let id = try await loadThread(threadID, in: directory)
+    let selected = modelID.map { id in models.first { $0.model == id } } ?? defaultModel
+    guard let selected else {
+      throw BookBrainError.message("Choose an available model from the Codex menu.")
+    }
+    // An explicit null clears a previously selected tier when resuming a chat.
+    let tier: Any = fast && selected.supportsFast ? "priority" as Any : NSNull()
+    let id = try await loadThread(threadID, in: directory, model: selected, tier: tier)
     activePDF =
       pdf != nil || !pdfAttachments.isEmpty
       ? PDFReferences(book: pdf, attachments: pdfAttachments) : nil
@@ -215,7 +264,8 @@ public final class CodexClient {
     do {
       result = .success(
         try await runTurn(
-          in: id, prompt: prompt, attachmentInputs: attachmentInputs, onUpdate: onUpdate))
+          in: id, prompt: prompt, attachmentInputs: attachmentInputs, model: selected, tier: tier,
+          onUpdate: onUpdate))
     } catch {
       result = .failure(error)
     }
@@ -225,7 +275,7 @@ public final class CodexClient {
   }
 
   private func runTurn(
-    in id: String, prompt: String, attachmentInputs: [[String: Any]],
+    in id: String, prompt: String, attachmentInputs: [[String: Any]], model: CodexModel, tier: Any,
     onUpdate: @escaping (String) -> Void
   )
     async throws -> String
@@ -249,6 +299,7 @@ public final class CodexClient {
           let result = try await request(
             "turn/start",
             [
+              "model": model.model, "serviceTier": tier, "effort": model.effort,
               "threadId": id, "input": [["type": "text", "text": prompt]] + attachmentInputs,
               "approvalPolicy": "never",
               "permissions": "book-brain",
