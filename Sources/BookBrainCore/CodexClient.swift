@@ -1,8 +1,31 @@
 import Foundation
 
+public struct CodexModel: Decodable {
+  public let model: String
+  public let displayName: String
+  let isDefault: Bool
+  let defaultReasoningEffort: String
+  private let supportedReasoningEfforts: [Effort]
+  private let serviceTiers: [Tier]?
+
+  private struct Effort: Decodable { let reasoningEffort: String }
+  private struct Tier: Decodable { let id: String }
+
+  public var supportsFast: Bool { serviceTiers?.contains { $0.id == "priority" } == true }
+  public var reasoningEfforts: [String] { supportedReasoningEfforts.map(\.reasoningEffort) }
+
+  public func reasoningEffort(for choice: String?) -> String {
+    if let choice, reasoningEfforts.contains(choice) { return choice }
+    return reasoningEfforts.contains("xhigh") ? "xhigh" : defaultReasoningEffort
+  }
+}
+
 @MainActor
 public final class CodexClient {
-  public let model = "gpt-6.1-terra"
+  public private(set) var models: [CodexModel] = []
+  public var defaultModel: CodexModel? {
+    models.first { $0.model == "gpt-6.1-terra" } ?? models.first(where: \.isDefault) ?? models.first
+  }
   public private(set) var isConnected = false
 
   private let executable: URL
@@ -12,7 +35,7 @@ public final class CodexClient {
   private var input: FileHandle?
   private var output: FileHandle?
   private var diagnostics: FileHandle?
-  private var lines = JSONLines()
+  private var lines = JSONLines(allowsImageResults: true)
   private var nextID = 0
   private var pending: [Int: CheckedContinuation<[String: Any], Error>] = [:]
   private var deadlines: [Int: Task<Void, Never>] = [:]
@@ -26,6 +49,7 @@ public final class CodexClient {
   private var reply: CheckedContinuation<String, Error>?
   private var onUpdate: ((String) -> Void)?
   private var onLookup: ((String) -> Void)?
+  private var generatedImages: [(id: String, data: Data)] = []
   private var accumulator = AnswerAccumulator()
   private var threadConfig: [String: Any] = [:]
   private var workingDirectory: URL?
@@ -59,7 +83,7 @@ public final class CodexClient {
     "memories.dedicated_tools=false",
     "tools.update_plan.enabled=false", "tools.experimental_request_user_input.enabled=false",
     "features.shell_tool=false", "features.unified_exec=false",
-    #"features.code_mode={enabled=false,direct_only_tool_namespaces=["book_pdf","web"]}"#,
+    #"features.code_mode={enabled=false,direct_only_tool_namespaces=["book_pdf","web","image_gen"]}"#,
     "features.standalone_web_search=true", "features.code_mode_host=false",
     "features.js_repl=false",
     "features.apply_patch_freeform=false", "features.apps=false", "features.plugins=false",
@@ -67,7 +91,7 @@ public final class CodexClient {
     "features.multi_agent=false", "features.collab=false",
     "features.skill_search=false", "features.skip_host_skill_discovery=true",
     "features.hooks=false", "features.codex_hooks=false", "features.plugin_hooks=false",
-    "features.image_generation=false", "features.view_image=false", "features.goals=false",
+    "features.image_generation=true", "features.view_image=false", "features.goals=false",
   ]
 
   public func connect() async throws {
@@ -97,7 +121,7 @@ public final class CodexClient {
     input = stdin.fileHandleForWriting
     output = stdout.fileHandleForReading
     diagnostics = stderr.fileHandleForReading
-    lines = JSONLines()
+    lines = JSONLines(allowsImageResults: true)
     process = child
     output?.readabilityHandler = { [weak self, weak child] handle in
       let data = handle.availableData
@@ -136,13 +160,14 @@ public final class CodexClient {
       guard let values = config["config"] as? [String: Any] else {
         throw BookBrainError.message("Couldn't verify the Codex settings.")
       }
-      threadConfig = ["model_reasoning_effort": "xhigh"]
+      threadConfig = [:]
       if let servers = values["mcp_servers"] as? [String: Any] {
         threadConfig["mcp_servers"] = Dictionary(
           uniqueKeysWithValues: servers.keys.map {
             ($0, ["enabled": false])
           })
       }
+      models = try await loadModels()
       isConnected = true
     } catch {
       stop(error: error)
@@ -150,16 +175,38 @@ public final class CodexClient {
     }
   }
 
-  private func loadThread(_ savedID: String?, in directory: URL) async throws
+  private func loadModels() async throws -> [CodexModel] {
+    var models: [CodexModel] = []
+    var params: [String: Any] = ["includeHidden": false]
+    repeat {
+      let page = try await request("model/list", params)
+      guard let data = page["data"] as? [[String: Any]] else {
+        throw BookBrainError.message("Codex returned an invalid model list.")
+      }
+      models += try JSONDecoder().decode(
+        [CodexModel].self, from: JSONSerialization.data(withJSONObject: data))
+      params["cursor"] = page["nextCursor"] as? String
+    } while params["cursor"] != nil
+    guard !models.isEmpty else {
+      throw BookBrainError.message("No Codex models are available for this account.")
+    }
+    return models
+  }
+
+  private func loadThread(
+    _ savedID: String?, in directory: URL, model: String, tier: Any, effort: String
+  )
+    async throws
     -> String
   {
     var params: [String: Any] = [
-      "model": model, "serviceTier": "priority", "cwd": directory.path,
+      "model": model, "serviceTier": tier, "cwd": directory.path,
       "approvalPolicy": "never", "permissions": "book-brain",
       "baseInstructions": ReadingPrompt.instructions,
       "developerInstructions":
-        "Use only hosted web search and the approved PDF tools as directed by the reading instructions.",
-      "config": threadConfig,
+        "Use hosted web search, approved PDF tools, and image generation as directed by the reading instructions.",
+      "config": threadConfig.merging(["model_reasoning_effort": effort]) { _, value in value
+      },
     ]
     if let savedID {
       params["threadId"] = savedID
@@ -193,20 +240,32 @@ public final class CodexClient {
   }
 
   public func ask(
-    prompt: String, threadID: String?, pdf: BookPDFReader? = nil,
+    prompt: String, threadID: String?, modelID: String? = nil, fast: Bool = true,
+    reasoningEffort: String? = nil, pdf: BookPDFReader? = nil,
     attachmentInputs: [[String: Any]] = [], pdfAttachments: [String: BookPDFReader] = [:],
     onLookup: ((String) -> Void)? = nil,
     onUpdate: @escaping (String) -> Void
   )
-    async throws -> (text: String, threadID: String)
+    async throws -> (text: String, threadID: String, images: [Data])
   {
     guard isConnected, let directory = workingDirectory else {
       throw BookBrainError.message("Connect to Codex before sending a question.")
     }
     guard !asking else { throw BookBrainError.message("Wait for the current reply to finish.") }
     asking = true
-    defer { asking = false }
-    let id = try await loadThread(threadID, in: directory)
+    defer {
+      asking = false
+      generatedImages.removeAll()
+    }
+    let selected = modelID.map { id in models.first { $0.model == id } } ?? defaultModel
+    guard let selected else {
+      throw BookBrainError.message("Choose an available model from the Codex menu.")
+    }
+    // An explicit null clears a previously selected tier when resuming a chat.
+    let tier: Any = fast && selected.supportsFast ? "priority" as Any : NSNull()
+    let effort = selected.reasoningEffort(for: reasoningEffort)
+    let id = try await loadThread(
+      threadID, in: directory, model: selected.model, tier: tier, effort: effort)
     activePDF =
       pdf != nil || !pdfAttachments.isEmpty
       ? PDFReferences(book: pdf, attachments: pdfAttachments) : nil
@@ -215,17 +274,20 @@ public final class CodexClient {
     do {
       result = .success(
         try await runTurn(
-          in: id, prompt: prompt, attachmentInputs: attachmentInputs, onUpdate: onUpdate))
+          in: id, prompt: prompt, attachmentInputs: attachmentInputs, model: selected.model,
+          tier: tier, effort: effort,
+          onUpdate: onUpdate))
     } catch {
       result = .failure(error)
     }
     // Release an idle chat for Codex memory processing before the next resume.
     if isConnected { _ = try? await request("thread/unsubscribe", ["threadId": id]) }
-    return (try result.get(), id)
+    return (try result.get(), id, generatedImages.map(\.data))
   }
 
   private func runTurn(
-    in id: String, prompt: String, attachmentInputs: [[String: Any]],
+    in id: String, prompt: String, attachmentInputs: [[String: Any]], model: String, tier: Any,
+    effort: String,
     onUpdate: @escaping (String) -> Void
   )
     async throws -> String
@@ -235,20 +297,13 @@ public final class CodexClient {
     self.onUpdate = onUpdate
     return try await withCheckedThrowingContinuation { continuation in
       reply = continuation
-      answerDeadline = Task { [weak self] in
-        guard let self else { return }
-        do { try await Task.sleep(nanoseconds: self.answerTimeout * 1_000_000_000) } catch {
-          return
-        }
-        self.stop(
-          error: BookBrainError.message(
-            "The reply timed out. Your draft is saved. Try reconnecting."))
-      }
+      startAnswerDeadline(seconds: answerTimeout)
       Task {
         do {
           let result = try await request(
             "turn/start",
             [
+              "model": model, "serviceTier": tier, "effort": effort,
               "threadId": id, "input": [["type": "text", "text": prompt]] + attachmentInputs,
               "approvalPolicy": "never",
               "permissions": "book-brain",
@@ -264,6 +319,72 @@ public final class CodexClient {
         } catch { finish(.failure(error)) }
       }
     }
+  }
+
+  private func startAnswerDeadline(seconds: UInt64) {
+    answerDeadline?.cancel()
+    answerDeadline = Task { [weak self] in
+      guard let self else { return }
+      do { try await Task.sleep(nanoseconds: seconds * 1_000_000_000) } catch {
+        return
+      }
+      self.stop(
+        error: BookBrainError.message(
+          "The reply timed out. Your draft is saved. Try reconnecting."))
+    }
+  }
+
+  private func collectImage(_ item: [String: Any], thread: String) throws {
+    if item["status"] as? String == "failed" {
+      let limited = (item["failure"] as? [String: Any])?["type"] as? String == "usageLimitExceeded"
+      throw BookBrainError.message(
+        limited
+          ? "Codex's image generation limit has been reached."
+          : "Codex couldn't generate the image.")
+    }
+    guard let id = item["id"] as? String else {
+      throw BookBrainError.message("Missing generated image ID.")
+    }
+    if generatedImages.contains(where: { $0.id == id }) { return }
+    let remaining = ChatAttachment.byteLimit - generatedImages.reduce(0) { $0 + $1.data.count }
+    let data: Data
+    if let encoded = item["result"] as? String, !encoded.isEmpty,
+      let bytes = Data(base64Encoded: encoded)
+    {
+      data = bytes
+    } else {
+      guard let path = item["savedPath"] as? String, let directory = workingDirectory,
+        UUID(uuidString: thread) != nil
+      else {
+        throw BookBrainError.message("Codex finished image generation without a readable image.")
+      }
+      let home =
+        ProcessInfo.processInfo.environment["CODEX_HOME"].map { URL(fileURLWithPath: $0) }
+        ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex")
+      let allowed = [
+        home.resolvingSymlinksInPath().appendingPathComponent("generated_images")
+          .appendingPathComponent(thread),
+        directory.resolvingSymlinksInPath().appendingPathComponent("generated_images"),
+      ]
+      let file = URL(fileURLWithPath: path).resolvingSymlinksInPath()
+      guard allowed.contains(where: { $0.path == file.deletingLastPathComponent().path }),
+        ["png", "jpeg", "jpg", "webp"].contains(file.pathExtension.lowercased())
+      else {
+        throw BookBrainError.message("Invalid image location for this chat.")
+      }
+      let values = try file.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+      guard values.isRegularFile == true, let size = values.fileSize, size <= remaining else {
+        throw BookBrainError.message("The generated image exceeds the reply's image limit.")
+      }
+      let handle = try FileHandle(forReadingFrom: file)
+      defer { try? handle.close() }
+      data = try handle.read(upToCount: remaining + 1) ?? Data()
+    }
+    guard !data.isEmpty, data.count <= remaining, generatedImages.count < ChatAttachment.countLimit
+    else {
+      throw BookBrainError.message("Generated images must fit within 20 MB and 8 images per reply.")
+    }
+    generatedImages.append((id, data))
   }
 
   public func disconnect() { stop(error: CancellationError()) }
@@ -388,6 +509,15 @@ public final class CodexClient {
         onUpdate?(accumulator.text)
       }
     case "item/started", "item/completed":
+      if let item = params["item"] as? [String: Any], item["type"] as? String == "imageGeneration" {
+        if method == "item/started" {
+          onLookup?("Generating an image…")
+          startAnswerDeadline(seconds: max(answerTimeout, 600))
+        } else {
+          do { try collectImage(item, thread: activeThread) } catch { stop(error: error) }
+        }
+        return
+      }
       if method == "item/started",
         (params["item"] as? [String: Any])?["type"] as? String == "webSearch"
       {
@@ -417,7 +547,9 @@ public final class CodexClient {
       guard let turn = params["turn"] as? [String: Any] else { return }
       switch turn["status"] as? String {
       case "completed":
-        if accumulator.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if generatedImages.isEmpty
+          && accumulator.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        {
           finish(
             .failure(BookBrainError.message("Codex finished without a reply. Try again.")))
         } else {

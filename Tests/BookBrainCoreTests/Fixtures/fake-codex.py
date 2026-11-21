@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Deterministic app-server peer for transport and lifecycle tests; no network."""
 
+import base64
 import json
 import os
 import sys
 import uuid
+from pathlib import Path
 
 
 def emit(message):
@@ -32,6 +34,7 @@ for line in sys.stdin:
     params = request.get("params", {})
     result = {}
     if method == "initialize":
+        assert "features.image_generation=true" in sys.argv
         assert "features.shell_tool=false" in sys.argv
         assert "features.unified_exec=false" in sys.argv
         assert "features.view_image=false" in sys.argv
@@ -44,6 +47,25 @@ for line in sys.stdin:
         result = {"userAgent": "fake-codex"}
     elif method == "account/read":
         result = {"account": {"type": "chatgpt"}, "requiresOpenaiAuth": True}
+    elif method == "model/list":
+        second_page = params.get("cursor") == "second"
+        model = "standard-model" if second_page else "gpt-6.1-terra"
+        efforts = ["medium"] if second_page else ["low", "medium", "xhigh"]
+        result = {
+            "data": [
+                {
+                    "model": model,
+                    "displayName": model,
+                    "isDefault": not second_page,
+                    "serviceTiers": [] if second_page else [{"id": "priority"}],
+                    "defaultReasoningEffort": "medium",
+                    "supportedReasoningEfforts": [
+                        {"reasoningEffort": effort} for effort in efforts
+                    ],
+                }
+            ],
+            "nextCursor": None if second_page else "second",
+        }
     elif method == "config/read":
         result = {"config": {"mcp_servers": {"private_server": {"enabled": True}}}}
     elif method in ("thread/start", "thread/resume"):
@@ -53,9 +75,11 @@ for line in sys.stdin:
         else:
             thread_id = params["threadId"]
             assert params["excludeTurns"] is True
-        assert params["model"] == "gpt-6.1-terra"
-        assert params["config"]["model_reasoning_effort"] == "xhigh"
-        assert params["serviceTier"] == "priority"
+        selected = (
+            params["model"],
+            params["serviceTier"],
+            params["config"]["model_reasoning_effort"],
+        )
         assert not params.get("ephemeral", False)
         assert params["approvalPolicy"] == "never"
         assert params["permissions"] == "book-brain"
@@ -69,6 +93,14 @@ for line in sys.stdin:
         assert params["permissions"] == "book-brain"
         prompt = json.loads(params["input"][0]["text"])
         question = prompt["current_question"]
+        expected = {
+            "STANDARD_MODEL": ("standard-model", None, "medium"),
+            "FAST_OFF": ("gpt-6.1-terra", None, "xhigh"),
+            "LOW_FAST": ("gpt-6.1-terra", "priority", "low"),
+            "LOW": ("gpt-6.1-terra", None, "low"),
+        }.get(question, ("gpt-6.1-terra", "priority", "xhigh"))
+        assert selected == expected
+        assert (params["model"], params["serviceTier"], params["effort"]) == expected
         if question == "ATTACHMENTS":
             images = [item for item in params["input"] if item["type"] == "image"]
             assert len(images) == 1
@@ -107,6 +139,25 @@ for line in sys.stdin:
                 "turn/completed",
                 turn={"status": "failed", "error": {"message": "rate limit test"}},
             )
+            continue
+        if question in ("IMAGE", "IMAGE_FILE", "IMAGE_INVALID_PATH"):
+            item = {"id": "ig_test", "type": "imageGeneration", "status": "in_progress"}
+            event("item/started", item=item)
+            item["status"] = "completed"
+            png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6h8AAAAASUVORK5CYII="
+            if question == "IMAGE":
+                item["result"] = png
+            else:
+                item["fileId"] = "synthetic-image"
+                root = Path.cwd()
+                if question == "IMAGE_FILE":
+                    root = root / "generated_images"
+                    root.mkdir(exist_ok=True)
+                path = root / "ig_test.png"
+                path.write_bytes(base64.b64decode(png))
+                item["savedPath"] = str(path)
+            event("item/completed", item=item)
+            event("turn/completed", turn={"status": "completed"})
             continue
         if question == "EMPTY":
             event("turn/completed", turn={"status": "completed"})

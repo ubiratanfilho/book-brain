@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "@earendil-works/pi-agent-core": "1.6.0",
+    "@earendil-works/pi-ai": "1.6.0"
+  },
+  "devDependencies": {
+    "bun": "1.4.5"
+  }
+}

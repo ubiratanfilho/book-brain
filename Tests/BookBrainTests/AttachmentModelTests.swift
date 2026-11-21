@@ -96,6 +96,38 @@ final class AttachmentModelTests: XCTestCase {
     XCTAssertTrue(FileManager.default.fileExists(atPath: notes.path))
   }
 
+  func testGeneratedImagesPersistAsAnswersAndInvalidPathsPreserveDraft() async throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let store = LibraryStore(directory: directory.appendingPathComponent("library"))
+    let book = Book(title: "Test", author: "Example")
+    var library = Library()
+    library.books = [book]
+    library.selectedBookID = book.id
+    try store.save(library)
+    let connection = try await client(in: directory)
+    defer { connection.disconnect() }
+    let model = AppModel(store: store, client: connection)
+    for question in ["IMAGE", "IMAGE_FILE"] {
+      model.field(\.question).wrappedValue = question
+      await model.send()
+      XCTAssertNil(model.notice)
+      let chat = try XCTUnwrap(try store.load().books.first?.currentChat)
+      let exchange = try XCTUnwrap(chat.exchanges.last)
+      XCTAssertTrue(exchange.answer.isEmpty)
+      XCTAssertTrue(exchange.attachments.isEmpty)
+      let image = try XCTUnwrap(exchange.generatedImages.first)
+      XCTAssertNotNil(
+        NSImage(contentsOf: store.attachmentURL(image, bookID: book.id, chatID: chat.id)))
+    }
+    model.field(\.question).wrappedValue = "IMAGE_INVALID_PATH"
+    await model.send()
+    XCTAssertTrue(model.notice?.contains("Invalid image location") == true)
+    XCTAssertEqual(model.selectedBook?.currentChat.exchanges.count, 2)
+    XCTAssertEqual(model.selectedBook?.currentChat.question, "IMAGE_INVALID_PATH")
+  }
+
   func testFailedSendRetainsImageDraftAndImageOnlyRetryCanBeSent() async throws {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

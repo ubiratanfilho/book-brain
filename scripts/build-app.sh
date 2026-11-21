@@ -14,6 +14,13 @@ trap 'rm -rf "$staging"' EXIT
 app="$staging/Book Brain.app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$binary_dir/BookBrain" "$app/Contents/MacOS/BookBrain"
+npm ci --prefix scripts/pi --no-audit --no-fund
+bun="scripts/pi/node_modules/.bin/bun"
+"$bun" test scripts/pi/agent.test.mjs
+"$bun" build --compile --no-compile-autoload-dotenv --no-compile-autoload-bunfig \
+  scripts/pi/agent.mjs --outfile "$app/Contents/MacOS/BookBrainPi"
+codesign --force --sign "$signing_identity" --timestamp=none "$app/Contents/MacOS/BookBrainPi"
+"$bun" scripts/pi/agent.mjs --models > "$app/Contents/Resources/PiModels.json"
 cp Resources/Info.plist "$app/Contents/Info.plist"
 cp -R "$binary_dir/swiftui-math_SwiftUIMath.bundle" "$app/Contents/Resources/"
 cp -R "$binary_dir/BookBrain_BookBrain.bundle" "$app/Contents/Resources/"
@@ -28,12 +35,24 @@ iconutil -c icns "$iconset" -o "$app/Contents/Resources/AppIcon.icns"
 licenses="$app/Contents/Resources/Licenses"
 mkdir -p "$licenses"
 cp LICENSE "$licenses/BookBrain.txt"
+cp scripts/pi/Pi-LICENSE.txt scripts/pi/Bun-LICENSE.md "$licenses/"
+node scripts/pi/notices.mjs > "$licenses/Pi-dependencies.txt"
 cp .build/checkouts/swift-markdown-ui/LICENSE "$licenses/MarkdownUI.txt"
 cp .build/checkouts/NetworkImage/LICENSE "$licenses/NetworkImage.txt"
 cp .build/checkouts/swift-cmark/COPYING "$licenses/cmark.txt"
 cp .build/checkouts/swiftui-math/LICENSE "$licenses/SwiftUIMath.txt"
 codesign --force --sign "$signing_identity" --timestamp=none "$app"
-codesign --verify --strict "$app"
+codesign --verify --deep --strict "$app"
+node -e '
+  const fs = require("node:fs");
+  const { execFileSync } = require("node:child_process");
+  const [catalog, helper] = process.argv.slice(1);
+  const models = JSON.parse(fs.readFileSync(catalog, "utf8"));
+  if (!["anthropic", "google", "openai"].every(p => models.some(m => m.provider === p))) {
+    throw Error("Missing provider models in the app bundle");
+  }
+  require("node:assert/strict").deepEqual(JSON.parse(execFileSync(helper, ["--models"])), models);
+' "$app/Contents/Resources/PiModels.json" "$app/Contents/MacOS/BookBrainPi"
 destination="build/Book Brain.app"
 if [[ -d "$destination" ]]; then
   mv "$destination" "$staging/previous.app"

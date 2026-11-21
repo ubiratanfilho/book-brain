@@ -46,7 +46,7 @@ struct BookDetailsForm: View {
               }
             }
             Text(
-              "The PDF is saved on this Mac. Codex can read and cite individual pages."
+              "The PDF is saved on this Mac. Your selected model can consult and cite individual pages."
             )
             .font(.caption).foregroundStyle(.secondary)
           }

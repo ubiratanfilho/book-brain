@@ -5,6 +5,17 @@ import XCTest
 
 @MainActor
 final class PassageClipboardTests: XCTestCase {
+  func testCopyAnswerPreservesRawSourceAndDoesNotCountAsANewPassage() throws {
+    let board = NSPasteboard.withUniqueName()
+    defer { board.releaseGlobally() }
+    let clipboard = PassageClipboard(board)
+    clipboard.beginReading()
+    let source = "  **Example** 📖\n\\[x^2\\]\n```swift\n  let x = 2\n```\n\n"
+    try clipboard.copyAnswer(source)
+    XCTAssertEqual(board.string(forType: .string), source)
+    XCTAssertFalse(clipboard.hasNewCopy)
+  }
+
   func testSelectionWithoutCopyIsRejectedAndRecopyingSameTextIsAllowed() async throws {
     let board = NSPasteboard.withUniqueName()
     defer { board.releaseGlobally() }
