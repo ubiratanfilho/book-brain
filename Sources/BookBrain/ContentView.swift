@@ -522,21 +522,20 @@ struct ContentView: View {
 
   private func answerText(_ text: String) -> some View {
     VStack(alignment: .leading, spacing: 9) {
-      HStack {
-        Label("BOOK BRAIN", systemImage: "sparkle")
-          .font(.system(size: 9, weight: .semibold)).tracking(1.5).foregroundStyle(Palette.green)
-        Spacer()
-        Button {
-          do { try model.clipboard.copyAnswer(text) } catch {
-            model.notice = error.localizedDescription
-          }
-        } label: {
-          Label("Copy raw", systemImage: "doc.on.doc")
-        }
-        .buttonStyle(.borderless).font(.caption)
-        .accessibilityLabel("Copy raw answer").help("Copy the original response as plain text")
-      }
+      Label("BOOK BRAIN", systemImage: "sparkle")
+        .font(.system(size: 9, weight: .semibold)).tracking(1.5).foregroundStyle(Palette.green)
       AnswerMarkdown(source: text).equatable()
+      Button {
+        do { try model.clipboard.copyAnswer(text) } catch {
+          model.notice = error.localizedDescription
+        }
+      } label: {
+        Image(systemName: "doc.on.doc")
+          .font(.system(size: 13)).foregroundStyle(Palette.muted)
+          .frame(width: 24, height: 24).contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel("Copy raw answer").help("Copy the original response as plain text")
     }
   }
 
