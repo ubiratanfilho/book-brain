@@ -7,5 +7,6 @@ build/
 .env.*
 !.env.example
 work/
+scripts/mathjax/node_modules/
 library.json
 *.pdf

@@ -1,5 +1,5 @@
 {
-  "originHash" : "05c0c2f0eafea15f29f262c39c6817d3f9028bf4fc17a8bfdbf7b5b2d58d7e3a",
+  "originHash" : "1278190b327e48205b868bd38acf3d4bfcce9deb67069f2dbaf03fc60a38f009",
   "pins" : [
     {
       "identity" : "networkimage",
@@ -26,6 +26,15 @@
       "state" : {
         "revision" : "5f613358148239d0292c0cef674a3c2314737f9e",
         "version" : "2.4.1"
+      }
+    },
+    {
+      "identity" : "swiftui-math",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/gonzalezreal/swiftui-math",
+      "state" : {
+        "revision" : "0b5c2cfaaec8d6193db206f675048eeb5ce95f71",
+        "version" : "0.1.0"
       }
     }
   ],

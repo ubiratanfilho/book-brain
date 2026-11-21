@@ -1,6 +1,7 @@
 import AppKit
 import BookBrainCore
 import SwiftUI
+import UniformTypeIdentifiers
 
 enum PassageSource {
   case paste
@@ -21,6 +22,7 @@ final class AppModel: ObservableObject {
   @Published var streamingAnswer = ""
   @Published var answerStatus = ""
   @Published var pendingQuestion = ""
+  @Published var pendingAttachments: [ChatAttachment] = []
   @Published var modelName = ""
   @Published var showNewBook = false
   @Published var floating = true
@@ -32,14 +34,18 @@ final class AppModel: ObservableObject {
   private var saveTask: Task<Void, Never>?
   private var canSave = false
 
-  init() {
-    let directory = FileManager.default.urls(
-      for: .applicationSupportDirectory, in: .userDomainMask)[0]
-      .appendingPathComponent("BookBrain", isDirectory: true)
-    store = LibraryStore(directory: directory)
+  init(store: LibraryStore? = nil, client: CodexClient? = nil) {
+    self.store =
+      store
+      ?? LibraryStore(
+        directory: FileManager.default.urls(
+          for: .applicationSupportDirectory, in: .userDomainMask)[0]
+          .appendingPathComponent("BookBrain", isDirectory: true))
+    self.client = client
+    isConnected = client?.isConnected == true
     library = Library()
     do {
-      library = try store.load()
+      library = try self.store.load()
       if !library.books.contains(where: { $0.id == library.selectedBookID }) {
         library.selectedBookID = library.books.first?.id
       }
@@ -134,6 +140,11 @@ final class AppModel: ObservableObject {
       if book.pdf != nil, FileManager.default.fileExists(atPath: file.path) {
         try FileManager.default.removeItem(at: file)
       }
+      let attachments = store.directory.appendingPathComponent("Attachments", isDirectory: true)
+        .appendingPathComponent(book.id.uuidString, isDirectory: true)
+      if FileManager.default.fileExists(atPath: attachments.path) {
+        try FileManager.default.removeItem(at: attachments)
+      }
     } catch { notice = error.localizedDescription }
   }
 
@@ -141,10 +152,22 @@ final class AppModel: ObservableObject {
     guard isEditable,
       let index = library.books.firstIndex(where: { $0.id == library.selectedBookID })
     else { return }
-    edit(&library.books[index])
-    captureIssue = nil
-    notice = nil
-    saveNow()
+    let previous = library.books[index]
+    var next = library
+    edit(&next.books[index])
+    do {
+      try commitLibrary(next)
+      let remaining = Set(
+        ([next.books[index].currentChat] + next.books[index].savedChats).map(\.id))
+      for chat in [previous.currentChat] + previous.savedChats where !remaining.contains(chat.id) {
+        let directory = store.attachmentsDirectory(bookID: previous.id, chatID: chat.id)
+        if FileManager.default.fileExists(atPath: directory.path) {
+          try FileManager.default.removeItem(at: directory)
+        }
+      }
+      captureIssue = nil
+      notice = nil
+    } catch { notice = error.localizedDescription }
   }
 
   func refreshCopyAccess() { canCopyFromKindle = CGPreflightPostEventAccess() }
@@ -156,7 +179,10 @@ final class AppModel: ObservableObject {
     } else {
       settingsPath = "System Settings → Privacy & Security → Accessibility"
     }
-    return "Enable Book Brain in \(settingsPath), then return to Kindle and press ⌘⇧B."
+    return """
+      Enable Book Brain in \(settingsPath), then return to Kindle and press ⌘⇧B. \
+      If it is already enabled, quit Book Brain, remove the old entry, add this copy, and reopen it.
+      """
   }
 
   func requestCopyAccess() {
@@ -238,42 +264,160 @@ final class AppModel: ObservableObject {
     }
   }
 
-  func send() async {
-    guard isEditable, captureIssue == nil, isConnected, let client, let snapshot = selectedBook
+  func chooseAttachments() {
+    guard isEditable, selectedBook != nil else { return }
+    let panel = NSOpenPanel()
+    panel.title = "Attach files to this message"
+    panel.allowedContentTypes = [
+      .image, .pdf, .plainText, .sourceCode, .json, .xml, .commaSeparatedText, .tabSeparatedText,
+    ]
+    panel.canChooseDirectories = false
+    panel.allowsMultipleSelection = true
+    if panel.runModal() == .OK { addAttachments(.files(panel.urls)) }
+  }
+
+  func addAttachments(_ source: AttachmentPaste) {
+    guard isEditable, let book = selectedBook else { return }
+    let count: Int
+    switch source {
+    case .files(let urls): count = urls.count
+    case .image: count = 1
+    }
+    guard book.currentChat.attachments.count + count <= ChatAttachment.countLimit else {
+      notice = "Attach up to 8 files to each message."
+      return
+    }
+    isImporting = true
+    notice = nil
+    let destination = store
+    Task {
+      defer { isImporting = false }
+      do {
+        let imported = try await Task.detached(priority: .userInitiated) {
+          var added: [ChatAttachment] = []
+          do {
+            switch source {
+            case .files(let urls):
+              for url in urls {
+                added.append(
+                  try destination.importAttachment(
+                    url, bookID: book.id, chatID: book.currentChat.id))
+              }
+            case .image(let data):
+              added.append(
+                try destination.importImage(
+                  data, name: "Pasted screenshot.png", bookID: book.id, chatID: book.currentChat.id)
+              )
+            }
+            _ = try destination.attachmentInputs(
+              book.currentChat.attachments + added, bookID: book.id, chatID: book.currentChat.id)
+            return added
+          } catch {
+            for attachment in added {
+              try? FileManager.default.removeItem(
+                at: destination.attachmentURL(
+                  attachment, bookID: book.id, chatID: book.currentChat.id))
+            }
+            throw error
+          }
+        }.value
+        var next = library
+        guard let index = next.books.firstIndex(where: { $0.id == book.id }),
+          next.books[index].currentChat.id == book.currentChat.id
+        else {
+          for attachment in imported {
+            try? FileManager.default.removeItem(
+              at: store.attachmentURL(attachment, bookID: book.id, chatID: book.currentChat.id))
+          }
+          return
+        }
+        next.books[index].currentChat.attachments += imported
+        do { try commitLibrary(next) } catch {
+          for attachment in imported {
+            try? FileManager.default.removeItem(
+              at: store.attachmentURL(attachment, bookID: book.id, chatID: book.currentChat.id))
+          }
+          throw error
+        }
+        focusQuestion += 1
+      } catch { notice = error.localizedDescription }
+    }
+  }
+
+  func removeAttachment(_ id: UUID) {
+    guard isEditable, let book = selectedBook,
+      let attachment = book.currentChat.attachments.first(where: { $0.id == id }),
+      let index = library.books.firstIndex(where: { $0.id == book.id })
     else { return }
+    var next = library
+    next.books[index].currentChat.attachments.removeAll { $0.id == id }
+    do {
+      try commitLibrary(next)
+      try FileManager.default.removeItem(
+        at: store.attachmentURL(attachment, bookID: book.id, chatID: book.currentChat.id))
+    } catch { notice = error.localizedDescription }
+  }
+
+  func send() async {
+    guard isEditable, captureIssue == nil, isConnected, let client, var snapshot = selectedBook
+    else { return }
+    // Older Codex threads cannot acquire new dynamic tool schemas on resume.
+    if !snapshot.currentChat.hasAttachmentTools && !snapshot.currentChat.attachments.isEmpty {
+      snapshot.currentChat.threadID = nil
+    }
     let prompt: String
-    do { prompt = try ReadingPrompt.make(book: snapshot) } catch {
+    let attachmentInputs: [[String: Any]]
+    do {
+      prompt = try ReadingPrompt.make(book: snapshot)
+      attachmentInputs = try store.attachmentInputs(
+        snapshot.currentChat.attachments, bookID: snapshot.id, chatID: snapshot.currentChat.id)
+    } catch {
       notice = error.localizedDescription
       return
     }
     isBusy = true
     answerStatus = "Preparing reply…"
-    pendingQuestion = snapshot.currentChat.question
+    pendingQuestion = snapshot.currentChat.questionForSending
+    pendingAttachments = snapshot.currentChat.attachments
     streamingAnswer = ""
     notice = nil
     saveNow()
     defer {
       isBusy = false
       pendingQuestion = ""
+      pendingAttachments = []
       streamingAnswer = ""
       isConnected = client.isConnected
     }
     do {
       let reader = snapshot.pdf.map { _ in BookPDFReader(file: store.pdfURL(for: snapshot.id)) }
+      let pdfAttachments = Dictionary(
+        uniqueKeysWithValues: snapshot.currentChat.allAttachments.filter { $0.kind == .pdf }.map {
+          (
+            $0.id.uuidString,
+            BookPDFReader(
+              file: store.attachmentURL($0, bookID: snapshot.id, chatID: snapshot.currentChat.id))
+          )
+        })
       let answer = try await client.ask(
         prompt: prompt, threadID: snapshot.currentChat.threadID, pdf: reader,
+        attachmentInputs: attachmentInputs, pdfAttachments: pdfAttachments,
         onLookup: { [weak self] in self?.answerStatus = $0 },
         onUpdate: { [weak self] text in self?.streamingAnswer = text })
       guard let index = library.books.firstIndex(where: { $0.id == snapshot.id }),
         library.books[index].currentChat.id == snapshot.currentChat.id
       else { return }
       library.books[index].currentChat.threadID = answer.threadID
+      library.books[index].currentChat.hasAttachmentTools =
+        snapshot.currentChat.hasAttachmentTools || snapshot.currentChat.threadID == nil
       library.books[index].currentChat.exchanges.append(
         Exchange(
-          question: snapshot.currentChat.question, excerpt: snapshot.currentChat.excerpt,
-          location: snapshot.currentChat.location, answer: answer.text
+          question: snapshot.currentChat.questionForSending, excerpt: snapshot.currentChat.excerpt,
+          location: snapshot.currentChat.location, answer: answer.text,
+          attachments: snapshot.currentChat.attachments
         ))
       library.books[index].currentChat.question = ""
+      library.books[index].currentChat.attachments = []
       saveNow()
       focusQuestion += 1
     } catch is CancellationError {

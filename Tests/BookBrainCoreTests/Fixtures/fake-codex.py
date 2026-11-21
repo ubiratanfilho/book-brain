@@ -32,6 +32,9 @@ for line in sys.stdin:
     params = request.get("params", {})
     result = {}
     if method == "initialize":
+        assert "features.shell_tool=false" in sys.argv
+        assert "features.unified_exec=false" in sys.argv
+        assert "features.view_image=false" in sys.argv
         assert "features.memories=true" in sys.argv
         assert "memories.use_memories=true" in sys.argv
         assert "memories.generate_memories=true" in sys.argv
@@ -46,6 +49,7 @@ for line in sys.stdin:
     elif method in ("thread/start", "thread/resume"):
         if method == "thread/start":
             thread_id = str(uuid.uuid4())
+            assert params["dynamicTools"][0]["name"] == "book_pdf"
         else:
             thread_id = params["threadId"]
             assert params["excludeTurns"] is True
@@ -63,7 +67,20 @@ for line in sys.stdin:
         }
     elif method == "turn/start":
         assert params["permissions"] == "book-brain"
-        question = json.loads(params["input"][0]["text"])["current_question"]
+        prompt = json.loads(params["input"][0]["text"])
+        question = prompt["current_question"]
+        if question == "ATTACHMENTS":
+            images = [item for item in params["input"] if item["type"] == "image"]
+            assert len(images) == 1
+            assert images[0]["url"].startswith("data:image/png;base64,")
+            files = [
+                json.loads(item["text"])
+                for item in params["input"][1:]
+                if item["type"] == "text" and item["text"].startswith("{")
+            ]
+            assert files[0]["untrusted_contents"] == "Synthetic attachment notes."
+            assert len(prompt["chat_attachments"]) == 2
+            assert prompt["recent_exchanges"][0]["question"] == "Earlier question"
         assert params["threadId"] == thread_id
         turn_id = str(uuid.uuid4())
         emit(
@@ -120,6 +137,29 @@ for line in sys.stdin:
                 )
                 assert json.loads(next(sys.stdin))["error"]["code"] == -32601
             event("item/started", item={"id": "web", "type": "webSearch"})
+        if question == "CHAT_PDF_SCOPE":
+            attachment_id = prompt["chat_attachments"][0]["id"]
+            for selected_id, success in (
+                (attachment_id, True),
+                ("another-chat", False),
+            ):
+                emit(
+                    {
+                        "id": "chat-pdf-check",
+                        "method": "item/tool/call",
+                        "params": {
+                            "threadId": thread_id,
+                            "turnId": turn_id,
+                            "namespace": "book_pdf",
+                            "tool": "read_book_page",
+                            "arguments": {"page": 1, "attachment_id": selected_id},
+                        },
+                    }
+                )
+                response = json.loads(next(sys.stdin))["result"]
+                assert response["success"] is success
+                if success:
+                    assert "amber" in response["contentItems"][0]["text"]
         if question == "SERVER_REQUEST":
             emit(
                 {"id": "approval-1", "method": "item/commandExecution/requestApproval"}

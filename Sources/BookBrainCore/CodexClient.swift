@@ -21,7 +21,7 @@ public final class CodexClient {
   private var activeThread: String?
   private var activeTurn: String?
   private var earlyEvents: [[String: Any]] = []
-  private var activePDF: BookPDFReader?
+  private var activePDF: PDFReferences?
   private var pdfCalls: [Task<Void, Never>] = []
   private var reply: CheckedContinuation<String, Error>?
   private var onUpdate: ((String) -> Void)?
@@ -150,7 +150,7 @@ public final class CodexClient {
     }
   }
 
-  private func loadThread(_ savedID: String?, in directory: URL, withPDF: Bool) async throws
+  private func loadThread(_ savedID: String?, in directory: URL) async throws
     -> String
   {
     var params: [String: Any] = [
@@ -158,17 +158,18 @@ public final class CodexClient {
       "approvalPolicy": "never", "permissions": "book-brain",
       "baseInstructions": ReadingPrompt.instructions,
       "developerInstructions":
-        "Use only hosted web search and the attached-book PDF tools as directed by the reading instructions.",
+        "Use only hosted web search and the approved PDF tools as directed by the reading instructions.",
       "config": threadConfig,
     ]
     if let savedID {
       params["threadId"] = savedID
       params["excludeTurns"] = true
-    } else if withPDF {
+    } else {
+      // Tools are fixed when a thread starts; a PDF may be attached in a later turn.
       params["dynamicTools"] = [
         [
           "type": "namespace", "name": BookPDFReader.namespace,
-          "description": "Consult the PDF attached to the selected book.",
+          "description": "Consult PDFs explicitly attached to the selected book and chat.",
           "tools": BookPDFReader.specs,
         ]
       ]
@@ -193,6 +194,7 @@ public final class CodexClient {
 
   public func ask(
     prompt: String, threadID: String?, pdf: BookPDFReader? = nil,
+    attachmentInputs: [[String: Any]] = [], pdfAttachments: [String: BookPDFReader] = [:],
     onLookup: ((String) -> Void)? = nil,
     onUpdate: @escaping (String) -> Void
   )
@@ -204,12 +206,16 @@ public final class CodexClient {
     guard !asking else { throw BookBrainError.message("Wait for the current reply to finish.") }
     asking = true
     defer { asking = false }
-    let id = try await loadThread(threadID, in: directory, withPDF: pdf != nil)
-    activePDF = pdf
+    let id = try await loadThread(threadID, in: directory)
+    activePDF =
+      pdf != nil || !pdfAttachments.isEmpty
+      ? PDFReferences(book: pdf, attachments: pdfAttachments) : nil
     self.onLookup = onLookup
     let result: Result<String, Error>
     do {
-      result = .success(try await runTurn(in: id, prompt: prompt, onUpdate: onUpdate))
+      result = .success(
+        try await runTurn(
+          in: id, prompt: prompt, attachmentInputs: attachmentInputs, onUpdate: onUpdate))
     } catch {
       result = .failure(error)
     }
@@ -218,7 +224,10 @@ public final class CodexClient {
     return (try result.get(), id)
   }
 
-  private func runTurn(in id: String, prompt: String, onUpdate: @escaping (String) -> Void)
+  private func runTurn(
+    in id: String, prompt: String, attachmentInputs: [[String: Any]],
+    onUpdate: @escaping (String) -> Void
+  )
     async throws -> String
   {
     activeThread = id
@@ -240,7 +249,7 @@ public final class CodexClient {
           let result = try await request(
             "turn/start",
             [
-              "threadId": id, "input": [["type": "text", "text": prompt]],
+              "threadId": id, "input": [["type": "text", "text": prompt]] + attachmentInputs,
               "approvalPolicy": "never",
               "permissions": "book-brain",
             ])
