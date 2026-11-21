@@ -362,7 +362,24 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, alignment: .leading).padding(.top, 6)
                 }.font(.system(size: 10)).foregroundStyle(Palette.muted)
               }
-              answerText(exchange.answer)
+              answerText(exchange.answer) {
+                ForEach(exchange.generatedImages) { image in
+                  let file = model.store.attachmentURL(
+                    image, bookID: book.id, chatID: book.currentChat.id)
+                  if let preview = NSImage(contentsOf: file) {
+                    Button {
+                      NSWorkspace.shared.open(file)
+                    } label: {
+                      Image(nsImage: preview).resizable().scaledToFit()
+                        .frame(maxWidth: 560, maxHeight: 420, alignment: .leading)
+                    }
+                    .buttonStyle(.plain).accessibilityLabel("Open generated image").help(
+                      "Open image")
+                  } else {
+                    Text("The saved image is unavailable.").font(.caption)
+                  }
+                }
+              }
             }
           }
           if model.isBusy {
@@ -379,7 +396,7 @@ struct ContentView: View {
                   Palette.muted)
               }
             } else {
-              answerText(model.streamingAnswer)
+              answerText(model.streamingAnswer) { EmptyView() }
             }
           }
           Color.clear.frame(height: 1).id("bottom")
@@ -520,22 +537,25 @@ struct ContentView: View {
       .background(Palette.green.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
   }
 
-  private func answerText(_ text: String) -> some View {
+  private func answerText(_ text: String, @ViewBuilder images: () -> some View) -> some View {
     VStack(alignment: .leading, spacing: 9) {
       Label("BOOK BRAIN", systemImage: "sparkle")
         .font(.system(size: 9, weight: .semibold)).tracking(1.5).foregroundStyle(Palette.green)
-      AnswerMarkdown(source: text).equatable()
-      Button {
-        do { try model.clipboard.copyAnswer(text) } catch {
-          model.notice = error.localizedDescription
+      if !text.isEmpty { AnswerMarkdown(source: text).equatable() }
+      images()
+      if !text.isEmpty {
+        Button {
+          do { try model.clipboard.copyAnswer(text) } catch {
+            model.notice = error.localizedDescription
+          }
+        } label: {
+          Image(systemName: "doc.on.doc")
+            .font(.system(size: 13)).foregroundStyle(Palette.muted)
+            .frame(width: 24, height: 24).contentShape(Rectangle())
         }
-      } label: {
-        Image(systemName: "doc.on.doc")
-          .font(.system(size: 13)).foregroundStyle(Palette.muted)
-          .frame(width: 24, height: 24).contentShape(Rectangle())
+        .buttonStyle(.plain)
+        .accessibilityLabel("Copy raw answer").help("Copy the original response as plain text")
       }
-      .buttonStyle(.plain)
-      .accessibilityLabel("Copy raw answer").help("Copy the original response as plain text")
     }
   }
 

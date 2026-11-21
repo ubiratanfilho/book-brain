@@ -451,7 +451,7 @@ final class AppModel: ObservableObject {
               file: store.attachmentURL($0, bookID: snapshot.id, chatID: snapshot.currentChat.id))
           )
         })
-      let answer: (text: String, threadID: String?)
+      let answer: (text: String, threadID: String?, images: [Data])
       if let model = snapshot.currentChat.apiModel {
         guard let executable = Bundle.main.url(forAuxiliaryExecutable: "BookBrainPi") else {
           throw BookBrainError.message("Build and open Book Brain.app to use API mode.")
@@ -466,7 +466,7 @@ final class AppModel: ObservableObject {
           model: model, key: key, prompt: prompt, inputs: attachmentInputs, pdf: references,
           onLookup: { self.answerStatus = "Reading the PDF…" },
           onUpdate: { self.streamingAnswer = $0 })
-        answer = (text, nil)
+        answer = (text, nil, [])
       } else {
         guard let client else {
           throw BookBrainError.message("Connect to Codex to send a question.")
@@ -478,23 +478,40 @@ final class AppModel: ObservableObject {
           attachmentInputs: attachmentInputs, pdfAttachments: pdfAttachments,
           onLookup: { [weak self] in self?.answerStatus = $0 },
           onUpdate: { [weak self] text in self?.streamingAnswer = text })
-        answer = (reply.text, reply.threadID)
+        answer = (reply.text, reply.threadID, reply.images)
       }
       guard let index = library.books.firstIndex(where: { $0.id == snapshot.id }),
         library.books[index].currentChat.id == snapshot.currentChat.id
       else { return }
-      library.books[index].currentChat.threadID = answer.threadID
-      library.books[index].currentChat.hasAttachmentTools =
-        snapshot.currentChat.hasAttachmentTools || snapshot.currentChat.threadID == nil
-      library.books[index].currentChat.exchanges.append(
-        Exchange(
-          question: snapshot.currentChat.questionForSending, excerpt: snapshot.currentChat.excerpt,
-          location: snapshot.currentChat.location, answer: answer.text,
-          attachments: snapshot.currentChat.attachments
-        ))
-      library.books[index].currentChat.question = ""
-      library.books[index].currentChat.attachments = []
-      saveNow()
+      var next = library
+      var images: [ChatAttachment] = []
+      do {
+        for (offset, data) in answer.images.enumerated() {
+          images.append(
+            try store.importImage(
+              data, name: "Generated image \(offset + 1).png",
+              bookID: snapshot.id, chatID: snapshot.currentChat.id))
+        }
+        next.books[index].currentChat.threadID = answer.threadID
+        next.books[index].currentChat.hasAttachmentTools =
+          snapshot.currentChat.hasAttachmentTools || snapshot.currentChat.threadID == nil
+        next.books[index].currentChat.exchanges.append(
+          Exchange(
+            question: snapshot.currentChat.questionForSending,
+            excerpt: snapshot.currentChat.excerpt,
+            location: snapshot.currentChat.location, answer: answer.text,
+            attachments: snapshot.currentChat.attachments, generatedImages: images
+          ))
+        next.books[index].currentChat.question = ""
+        next.books[index].currentChat.attachments = []
+        try commitLibrary(next)
+      } catch {
+        for image in images {
+          try? FileManager.default.removeItem(
+            at: store.attachmentURL(image, bookID: snapshot.id, chatID: snapshot.currentChat.id))
+        }
+        throw error
+      }
       focusQuestion += 1
     } catch is CancellationError {
       notice = "Reply stopped. Your passage and question are saved."

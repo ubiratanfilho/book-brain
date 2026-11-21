@@ -4,19 +4,37 @@ import Foundation
 struct JSONLines {
   private var buffer = Data()
 
+  private let allowsImageResults: Bool
+  init(allowsImageResults: Bool = false) { self.allowsImageResults = allowsImageResults }
+
   mutating func append(_ data: Data) throws -> [[String: Any]] {
-    buffer.append(data)
-    guard buffer.count <= 8 * 1_024 * 1_024 else {
-      throw BookBrainError.message("The assistant sent a larger reply than expected.")
-    }
     var messages: [[String: Any]] = []
-    while let end = buffer.firstIndex(of: 10) {
-      let line = buffer[..<end]
-      buffer.removeSubrange(...end)
-      if line.isEmpty { continue }
-      guard let object = try JSONSerialization.jsonObject(with: line) as? [String: Any] else {
+    let normalLimit = 8 * 1024 * 1024
+    let limit = allowsImageResults ? 28 * 1024 * 1024 : normalLimit
+    var rest = data[...]
+    while !rest.isEmpty {
+      let newline = rest.firstIndex(of: 10)
+      let end = newline ?? rest.endIndex
+      guard buffer.count + rest.distance(from: rest.startIndex, to: end) <= limit else {
+        throw BookBrainError.message("The assistant sent a larger reply than expected.")
+      }
+      buffer.append(contentsOf: rest[..<end])
+      guard let newline else { break }
+      rest = rest[rest.index(after: newline)...]
+      if buffer.isEmpty { continue }
+      guard let object = try JSONSerialization.jsonObject(with: buffer) as? [String: Any] else {
         throw BookBrainError.message("The assistant returned an invalid reply.")
       }
+      if buffer.count > normalLimit {
+        let params = object["params"] as? [String: Any]
+        let item = params?["item"] as? [String: Any]
+        guard object["method"] as? String == "item/completed",
+          item?["type"] as? String == "imageGeneration"
+        else {
+          throw BookBrainError.message("The assistant sent a larger reply than expected.")
+        }
+      }
+      buffer.removeAll()
       messages.append(object)
     }
     return messages

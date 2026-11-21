@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Deterministic app-server peer for transport and lifecycle tests; no network."""
 
+import base64
 import json
 import os
 import sys
 import uuid
+from pathlib import Path
 
 
 def emit(message):
@@ -32,6 +34,7 @@ for line in sys.stdin:
     params = request.get("params", {})
     result = {}
     if method == "initialize":
+        assert "features.image_generation=true" in sys.argv
         assert "features.shell_tool=false" in sys.argv
         assert "features.unified_exec=false" in sys.argv
         assert "features.view_image=false" in sys.argv
@@ -132,6 +135,25 @@ for line in sys.stdin:
                 "turn/completed",
                 turn={"status": "failed", "error": {"message": "rate limit test"}},
             )
+            continue
+        if question in ("IMAGE", "IMAGE_FILE", "IMAGE_INVALID_PATH"):
+            item = {"id": "ig_test", "type": "imageGeneration", "status": "in_progress"}
+            event("item/started", item=item)
+            item["status"] = "completed"
+            png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j6h8AAAAASUVORK5CYII="
+            if question == "IMAGE":
+                item["result"] = png
+            else:
+                item["fileId"] = "synthetic-image"
+                root = Path.cwd()
+                if question == "IMAGE_FILE":
+                    root = root / "generated_images"
+                    root.mkdir(exist_ok=True)
+                path = root / "ig_test.png"
+                path.write_bytes(base64.b64decode(png))
+                item["savedPath"] = str(path)
+            event("item/completed", item=item)
+            event("turn/completed", turn={"status": "completed"})
             continue
         if question == "EMPTY":
             event("turn/completed", turn={"status": "completed"})

@@ -19,6 +19,8 @@ public enum ReadingPrompt {
       author and necessary public topic terms in searches. Keep private memories, notes,
       PDF text and Kindle excerpts out of web queries. If reliable evidence cannot be
       found, say so. Never attribute unverified quotations or page numbers to the author.
+      When the reader requests an illustration, use image generation. Book Brain displays the result directly.
+      Use only images already shared in this chat as references. Do not include file paths or image data in your text.
       When relevant, use Codex memories to tailor examples and explanations to the reader.
       Treat memories as background about the reader. Admit missing context.
       """

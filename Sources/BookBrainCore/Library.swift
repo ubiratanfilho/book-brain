@@ -8,20 +8,22 @@ public struct Exchange: Codable, Identifiable, Equatable {
   public var location: String
   public var answer: String
   public var attachments: [ChatAttachment]
+  public var generatedImages: [ChatAttachment]
 
   public init(
     question: String, excerpt: String, location: String, answer: String,
-    attachments: [ChatAttachment] = []
+    attachments: [ChatAttachment] = [], generatedImages: [ChatAttachment] = []
   ) {
     self.question = question
     self.excerpt = excerpt
     self.location = location
     self.answer = answer
+    self.generatedImages = generatedImages
     self.attachments = attachments
   }
 
   private enum CodingKeys: String, CodingKey {
-    case id, date, question, excerpt, location, answer, attachments
+    case id, date, question, excerpt, location, answer, attachments, generatedImages
   }
   public init(from decoder: Decoder) throws {
     let fields = try decoder.container(keyedBy: CodingKeys.self)
@@ -31,6 +33,8 @@ public struct Exchange: Codable, Identifiable, Equatable {
     excerpt = try fields.decode(String.self, forKey: .excerpt)
     location = try fields.decode(String.self, forKey: .location)
     answer = try fields.decode(String.self, forKey: .answer)
+    generatedImages =
+      try fields.decodeIfPresent([ChatAttachment].self, forKey: .generatedImages) ?? []
     attachments = try fields.decodeIfPresent([ChatAttachment].self, forKey: .attachments) ?? []
   }
 }
