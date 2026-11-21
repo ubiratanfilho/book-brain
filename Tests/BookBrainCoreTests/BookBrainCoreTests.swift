@@ -24,6 +24,8 @@ final class LibraryTests: XCTestCase {
     ]
     try JSONSerialization.data(withJSONObject: old).write(to: store.file)
     var library = try store.load()
+    XCTAssertNil(library.books[0].currentChat.codexReasoningEffort)
+    library.books[0].currentChat.codexReasoningEffort = "medium"
     library.books[0].currentChat.codexModel = "standard-model"
     library.books[0].currentChat.codexFast = false
     let originalChat = library.books[0].currentChat
@@ -37,6 +39,7 @@ final class LibraryTests: XCTestCase {
     XCTAssertTrue(library.books[0].currentChat.isBlank)
     XCTAssertEqual(library.books[0].currentChat.codexModel, "standard-model")
     XCTAssertFalse(library.books[0].currentChat.codexFast)
+    XCTAssertEqual(library.books[0].currentChat.codexReasoningEffort, "medium")
     library.books[0].currentChat.excerpt = "Another passage"
     library.books[0].currentChat.question = "Another question"
     library.books[0].currentChat.threadID = "thread-b"
@@ -193,20 +196,24 @@ final class CodexClientTests: XCTestCase {
     XCTAssertNotEqual(fresh.threadID, answer.threadID)
   }
 
-  func testChangeModelAndFastModeWithinOneThread() async throws {
+  func testChangeModelReasoningEffortAndFastModeWithinOneThread() async throws {
     let client = try client()
     defer { client.disconnect() }
     try await client.connect()
     XCTAssertEqual(client.models.map(\.model), ["gpt-6.1-terra", "standard-model"])
-    let first = try await client.ask(prompt: prompt("OK"), threadID: nil) { _ in }
-    for (question, model, fast) in [
-      ("FAST_OFF", "gpt-6.1-terra", false),
-      ("STANDARD_MODEL", "standard-model", true),
-      ("OK", "gpt-6.1-terra", true),
+    XCTAssertEqual(client.models.first?.reasoningEfforts, ["low", "medium", "xhigh"])
+    let first = try await client.ask(
+      prompt: prompt("LOW_FAST"), threadID: nil, reasoningEffort: "low"
+    ) { _ in }
+    for (question, model, fast, effort) in [
+      ("LOW", "gpt-6.1-terra", false, "low"),
+      ("FAST_OFF", "gpt-6.1-terra", false, "xhigh"),
+      ("STANDARD_MODEL", "standard-model", true, "low"),
+      ("OK", "gpt-6.1-terra", true, nil),
     ] {
       let reply = try await client.ask(
         prompt: prompt(question), threadID: first.threadID,
-        modelID: model, fast: fast
+        modelID: model, fast: fast, reasoningEffort: effort
       ) { _ in }
       XCTAssertEqual(reply.threadID, first.threadID)
     }

@@ -130,21 +130,40 @@ struct ContentView: View {
               selection: Binding(
                 get: { model.codexModelID },
                 set: {
-                  model.configureCodex(modelID: $0, fast: chat.codexFast)
+                  model.configureCodex(
+                    modelID: $0, fast: chat.codexFast, reasoningEffort: chat.codexReasoningEffort)
                 })
             ) {
               ForEach(model.codexModels, id: \.model) { item in
                 Text(item.displayName).tag(item.model)
               }
             }.pickerStyle(.menu)
-            Toggle(
-              "Fast mode",
-              isOn: Binding(
-                get: { model.codexSupportsFast && chat.codexFast },
-                set: {
-                  model.configureCodex(modelID: model.codexModelID, fast: $0)
-                })
-            ).disabled(!model.codexSupportsFast)
+            if let selected = model.selectedCodexModel {
+              if !selected.reasoningEfforts.isEmpty {
+                Picker(
+                  "Reasoning effort",
+                  selection: Binding(
+                    get: { selected.reasoningEffort(for: chat.codexReasoningEffort) },
+                    set: {
+                      model.configureCodex(
+                        modelID: selected.model, fast: chat.codexFast, reasoningEffort: $0)
+                    })
+                ) {
+                  ForEach(selected.reasoningEfforts, id: \.self) { effort in
+                    Text(effort == "xhigh" ? "Extra high" : effort.capitalized).tag(effort)
+                  }
+                }.pickerStyle(.menu)
+              }
+              Toggle(
+                "Fast mode",
+                isOn: Binding(
+                  get: { selected.supportsFast && chat.codexFast },
+                  set: {
+                    model.configureCodex(
+                      modelID: selected.model, fast: $0, reasoningEffort: chat.codexReasoningEffort)
+                  })
+              ).disabled(!selected.supportsFast)
+            }
           }
         }
       } label: {

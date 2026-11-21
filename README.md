@@ -26,7 +26,7 @@ The build installs the pinned Pi dependencies and packages the helper for your M
 
 1. Choose **Add book** and enter the title and author. If you'd like Codex to consult a PDF, choose **Attach PDF (optional)…** before saving.
 2. Click **Enable Kindle capture…** and grant the macOS permission. In Kindle for Mac, select a paragraph you can copy and press **⌘⇧B**. Book Brain shows the passage for review. For manual capture, copy the passage yourself and click **Paste passage**.
-3. In a new chat, open the connection menu and choose **Use an API key…** to select a provider and model. Enter your key once to save it in the macOS Keychain. For Codex, choose **Model** and toggle **Fast mode** in the same menu. You can change either between questions.
+3. In a new chat, open the connection menu and choose **Use an API key…** to select a provider and model. Enter your key once to save it in the macOS Keychain. For Codex, choose **Model**, set **Reasoning effort**, and toggle **Fast mode** in the same menu. You can change these settings between questions.
 4. Try asking *“Can you explain this with an example?”* Press **Enter** to send. Ask a follow-up in the same chat, or click its title later to reopen a conversation for that book. Replies follow the language of your question.
 5. Use the **paperclip** beside the question to attach images, PDFs, or UTF-8 text files. To paste a screenshot, copy it and press **⌘V** in the question field. Review or remove attachments before sending.
 

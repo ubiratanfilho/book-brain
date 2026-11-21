@@ -50,7 +50,7 @@ for line in sys.stdin:
     elif method == "model/list":
         second_page = params.get("cursor") == "second"
         model = "standard-model" if second_page else "gpt-6.1-terra"
-        effort = "medium" if second_page else "xhigh"
+        efforts = ["medium"] if second_page else ["low", "medium", "xhigh"]
         result = {
             "data": [
                 {
@@ -58,8 +58,10 @@ for line in sys.stdin:
                     "displayName": model,
                     "isDefault": not second_page,
                     "serviceTiers": [] if second_page else [{"id": "priority"}],
-                    "defaultReasoningEffort": effort,
-                    "supportedReasoningEfforts": [{"reasoningEffort": effort}],
+                    "defaultReasoningEffort": "medium",
+                    "supportedReasoningEfforts": [
+                        {"reasoningEffort": effort} for effort in efforts
+                    ],
                 }
             ],
             "nextCursor": None if second_page else "second",
@@ -94,6 +96,8 @@ for line in sys.stdin:
         expected = {
             "STANDARD_MODEL": ("standard-model", None, "medium"),
             "FAST_OFF": ("gpt-6.1-terra", None, "xhigh"),
+            "LOW_FAST": ("gpt-6.1-terra", "priority", "low"),
+            "LOW": ("gpt-6.1-terra", None, "low"),
         }.get(question, ("gpt-6.1-terra", "priority", "xhigh"))
         assert selected == expected
         assert (params["model"], params["serviceTier"], params["effort"]) == expected

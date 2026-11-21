@@ -12,9 +12,11 @@ public struct CodexModel: Decodable {
   private struct Tier: Decodable { let id: String }
 
   public var supportsFast: Bool { serviceTiers?.contains { $0.id == "priority" } == true }
-  var effort: String {
-    supportedReasoningEfforts.contains { $0.reasoningEffort == "xhigh" }
-      ? "xhigh" : defaultReasoningEffort
+  public var reasoningEfforts: [String] { supportedReasoningEfforts.map(\.reasoningEffort) }
+
+  public func reasoningEffort(for choice: String?) -> String {
+    if let choice, reasoningEfforts.contains(choice) { return choice }
+    return reasoningEfforts.contains("xhigh") ? "xhigh" : defaultReasoningEffort
   }
 }
 
@@ -191,17 +193,19 @@ public final class CodexClient {
     return models
   }
 
-  private func loadThread(_ savedID: String?, in directory: URL, model: CodexModel, tier: Any)
+  private func loadThread(
+    _ savedID: String?, in directory: URL, model: String, tier: Any, effort: String
+  )
     async throws
     -> String
   {
     var params: [String: Any] = [
-      "model": model.model, "serviceTier": tier, "cwd": directory.path,
+      "model": model, "serviceTier": tier, "cwd": directory.path,
       "approvalPolicy": "never", "permissions": "book-brain",
       "baseInstructions": ReadingPrompt.instructions,
       "developerInstructions":
         "Use hosted web search, approved PDF tools, and image generation as directed by the reading instructions.",
-      "config": threadConfig.merging(["model_reasoning_effort": model.effort]) { _, value in value
+      "config": threadConfig.merging(["model_reasoning_effort": effort]) { _, value in value
       },
     ]
     if let savedID {
@@ -237,7 +241,7 @@ public final class CodexClient {
 
   public func ask(
     prompt: String, threadID: String?, modelID: String? = nil, fast: Bool = true,
-    pdf: BookPDFReader? = nil,
+    reasoningEffort: String? = nil, pdf: BookPDFReader? = nil,
     attachmentInputs: [[String: Any]] = [], pdfAttachments: [String: BookPDFReader] = [:],
     onLookup: ((String) -> Void)? = nil,
     onUpdate: @escaping (String) -> Void
@@ -259,7 +263,9 @@ public final class CodexClient {
     }
     // An explicit null clears a previously selected tier when resuming a chat.
     let tier: Any = fast && selected.supportsFast ? "priority" as Any : NSNull()
-    let id = try await loadThread(threadID, in: directory, model: selected, tier: tier)
+    let effort = selected.reasoningEffort(for: reasoningEffort)
+    let id = try await loadThread(
+      threadID, in: directory, model: selected.model, tier: tier, effort: effort)
     activePDF =
       pdf != nil || !pdfAttachments.isEmpty
       ? PDFReferences(book: pdf, attachments: pdfAttachments) : nil
@@ -268,7 +274,8 @@ public final class CodexClient {
     do {
       result = .success(
         try await runTurn(
-          in: id, prompt: prompt, attachmentInputs: attachmentInputs, model: selected, tier: tier,
+          in: id, prompt: prompt, attachmentInputs: attachmentInputs, model: selected.model,
+          tier: tier, effort: effort,
           onUpdate: onUpdate))
     } catch {
       result = .failure(error)
@@ -279,7 +286,8 @@ public final class CodexClient {
   }
 
   private func runTurn(
-    in id: String, prompt: String, attachmentInputs: [[String: Any]], model: CodexModel, tier: Any,
+    in id: String, prompt: String, attachmentInputs: [[String: Any]], model: String, tier: Any,
+    effort: String,
     onUpdate: @escaping (String) -> Void
   )
     async throws -> String
@@ -295,7 +303,7 @@ public final class CodexClient {
           let result = try await request(
             "turn/start",
             [
-              "model": model.model, "serviceTier": tier, "effort": model.effort,
+              "model": model, "serviceTier": tier, "effort": effort,
               "threadId": id, "input": [["type": "text", "text": prompt]] + attachmentInputs,
               "approvalPolicy": "never",
               "permissions": "book-brain",

@@ -66,18 +66,21 @@ final class AppModel: ObservableObject {
   var codexModelID: String {
     selectedBook?.currentChat.codexModel ?? client?.defaultModel?.model ?? ""
   }
-  var codexSupportsFast: Bool {
-    codexModels.first { $0.model == codexModelID }?.supportsFast == true
+  var selectedCodexModel: CodexModel? {
+    codexModels.first { $0.model == codexModelID }
   }
 
-  func configureCodex(modelID: String, fast: Bool) {
+  func configureCodex(modelID: String, fast: Bool, reasoningEffort: String?) {
     guard apiModel == nil, isConnected, isEditable,
-      codexModels.contains(where: { $0.model == modelID }),
+      let model = codexModels.first(where: { $0.model == modelID }),
       let index = library.books.firstIndex(where: { $0.id == library.selectedBookID })
     else { return }
     var next = library
     next.books[index].currentChat.codexModel = modelID
     next.books[index].currentChat.codexFast = fast
+    next.books[index].currentChat.codexReasoningEffort = reasoningEffort.flatMap {
+      model.reasoningEfforts.contains($0) ? $0 : nil
+    }
     do { try commitLibrary(next) } catch { notice = error.localizedDescription }
   }
 
@@ -474,7 +477,8 @@ final class AppModel: ObservableObject {
         let reply = try await client.ask(
           prompt: prompt, threadID: snapshot.currentChat.threadID,
           modelID: snapshot.currentChat.codexModel,
-          fast: snapshot.currentChat.codexFast, pdf: reader,
+          fast: snapshot.currentChat.codexFast,
+          reasoningEffort: snapshot.currentChat.codexReasoningEffort, pdf: reader,
           attachmentInputs: attachmentInputs, pdfAttachments: pdfAttachments,
           onLookup: { [weak self] in self?.answerStatus = $0 },
           onUpdate: { [weak self] text in self?.streamingAnswer = text })

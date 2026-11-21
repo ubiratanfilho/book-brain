@@ -45,6 +45,7 @@ public struct ReadingChat: Codable, Identifiable, Equatable {
   public var customTitle = ""
   public var codexModel: String?
   public var codexFast = true
+  public var codexReasoningEffort: String?
   public var apiModel: APIModel?
   public var threadID: String?
   public var location = ""
@@ -63,7 +64,8 @@ public struct ReadingChat: Codable, Identifiable, Equatable {
   }
 
   private enum CodingKeys: String, CodingKey {
-    case id, createdAt, customTitle, threadID, apiModel, codexModel, codexFast, location, excerpt,
+    case id, createdAt, customTitle, threadID, apiModel, codexModel, codexFast,
+      codexReasoningEffort, location, excerpt,
       question, exchanges,
       attachments,
       hasAttachmentTools
@@ -75,6 +77,7 @@ public struct ReadingChat: Codable, Identifiable, Equatable {
     customTitle = try fields.decode(String.self, forKey: .customTitle)
     codexModel = try fields.decodeIfPresent(String.self, forKey: .codexModel)
     codexFast = try fields.decodeIfPresent(Bool.self, forKey: .codexFast) ?? true
+    codexReasoningEffort = try fields.decodeIfPresent(String.self, forKey: .codexReasoningEffort)
     apiModel = try fields.decodeIfPresent(APIModel.self, forKey: .apiModel)
     threadID = try fields.decodeIfPresent(String.self, forKey: .threadID)
     location = try fields.decode(String.self, forKey: .location)
@@ -123,6 +126,7 @@ public struct Book: Codable, Identifiable, Equatable {
     currentChat.apiModel = previous.apiModel
     currentChat.codexModel = previous.codexModel
     currentChat.codexFast = previous.codexFast
+    currentChat.codexReasoningEffort = previous.codexReasoningEffort
   }
 
   public mutating func openChat(_ id: UUID) {
